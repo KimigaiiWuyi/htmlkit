@@ -28,7 +28,7 @@ __plugin_meta__ = PluginMetadata(
 )
 
 driver = nonebot.get_driver()
-session = driver.get_session() if isinstance(driver, HTTPClientMixin) else None
+session = None
 
 
 def init_fontconfig(**kwargs: Any):
@@ -40,10 +40,20 @@ def init_fontconfig(**kwargs: Any):
 
 @driver.on_startup
 async def _():
+    global session
+
     init_fontconfig()
 
-    if session is not None:
-        await session.setup()
+    try:
+        if isinstance(driver, HTTPClientMixin):
+            driver_session = driver.get_session()
+            await driver_session.setup()
+            session = driver_session
+            logger.info("Got HTTP session.")
+    except Exception as e:
+        logger.opt(exception=e).error(
+            "Error while getting HTTP session and setting up."
+        )
 
 
 ImgFetchFn = Callable[[str], Coroutine[Any, Any, bytes | None]]
