@@ -1,6 +1,6 @@
-# nonebot-plugin-htmlkit
+# htmlkit
 
-一个基于 [litehtml](https://github.com/litehtml/litehtml) 的轻量级 HTML 渲染插件。
+一个基于 [litehtml](https://github.com/litehtml/litehtml) 的轻量级 HTML 渲染库。
 
 ## 特性
 
@@ -12,77 +12,79 @@
 
 ## 安装
 
-使用 [`nb-cli`](https://cli.nonebot.dev/) 安装：
+使用 pip 安装：
 
 ```bash
-nb plugin install nonebot-plugin-htmlkit
+pip install htmlkit
 ```
 
-或者，使用你选择的 Python 包管理器工具安装 `nonebot-plugin-htmlkit` 即可。
+或者使用其他 Python 包管理器安装。
 
 ## 使用
 
-### API
+### 快速开始
 
 ```python
-from nonebot import require
+import asyncio
+from htmlkit import html_to_pic, text_to_pic, md_to_pic
 
-require("nonebot_plugin_htmlkit")
-from nonebot_plugin_htmlkit import (
-    text_to_pic,
-    md_to_pic,
-    template_to_pic,
-    html_to_pic,
+async def main():
+    # 渲染 HTML 到图片
+    html = "<h1>Hello World</h1><p>This is a test.</p>"
+    image_bytes = await html_to_pic(html)
+    
+    # 保存图片
+    with open("output.png", "wb") as f:
+        f.write(image_bytes)
+
+# 运行
+asyncio.run(main())
+```
+
+### 初始化 Fontconfig
+
+在使用前，建议先初始化 fontconfig：
+
+```python
+from htmlkit import init_fontconfig
+
+# 使用默认配置初始化
+init_fontconfig()
+
+# 或者指定自定义配置
+init_fontconfig(
+    fontconfig_path="/path/to/fonts",
+    fontconfig_file="/path/to/fonts.conf"
 )
 ```
 
-> [!CAUTION]
-> 注意：请先 `require("nonebot_plugin_htmlkit")` 后再 `import` 插件！！！
+### API
 
-### 配置项
+- `html_to_pic(html, **options)` - 将 HTML 渲染为图片
+- `debug_html_to_pic(html, **options)` - 渲染 HTML 并返回图片和调试信息
+- `text_to_pic(text, css_path, **options)` - 将纯文本渲染为图片
+- `md_to_pic(md, css_path, **options)` - 将 Markdown 渲染为图片
+- `template_to_html(template_path, template_name, **kwargs)` - 使用 Jinja2 渲染 HTML
+- `template_to_pic(template_path, template_name, templates, **options)` - 使用 Jinja2 模板渲染图片
 
-`plugin-htmlkit` 的配置项主要为 [fontconfig](https://www.freedesktop.org/wiki/Software/fontconfig/) 的相关配置。
+### 配置选项
 
-对于 `FC/FONTCONFIG` 开头的配置项，请参考 [fontconfig 文档](https://www.freedesktop.org/software/fontconfig/fontconfig-user.html) 以了解更多。
+htmlkit 支持通过 `init_fontconfig()` 函数配置 fontconfig 选项：
 
 ```python
-# ===============================
-# Fontconfig 配置
-# ===============================
+from htmlkit import init_fontconfig
 
-# FONTCONFIG_FILE
-# 用于覆盖默认的配置文件路径。
-FONTCONFIG_FILE: str
-
-# FONTCONFIG_PATH
-# 用于覆盖默认的配置目录。
-FONTCONFIG_PATH: str
-
-# FONTCONFIG_SYSROOT
-# 用于设置默认的 sysroot 目录。
-FONTCONFIG_SYSROOT: str
-
-# FC_DEBUG
-# 用于输出详细的调试信息。
-# 详细见 fontconfig 文档。
-FC_DEBUG: str
-
-# FC_DBG_MATCH_FILTER
-# 用于在调试时过滤特定模式。
-# 仅当 FC_DEBUG 设置为 MATCH2 时生效。
-FC_DBG_MATCH_FILTER: str
-
-# FC_LANG
-# 用于指定查询时的默认语言（弱绑定）。
-# 如果未设置，则从当前 locale 推导。
-FC_LANG: str
-
-# FONTCONFIG_USE_MMAP
-# 控制是否使用 mmap(2) 来处理缓存文件（如果可用）。
-# 值为布尔类型（yes/no, 1/0）。
-# 如果显式设置该变量，将跳过系统检查并强制启用或禁用。
-FONTCONFIG_USE_MMAP: str
+init_fontconfig(
+    fontconfig_file="/path/to/fonts.conf",  # 覆盖默认的配置文件
+    fontconfig_path="/path/to/fonts",       # 覆盖默认的配置目录
+    fontconfig_sysroot="/path/to/sysroot",  # 设置 sysroot
+    fc_debug="1",                           # 设置 debug 级别
+    fc_lang="zh_CN",                        # 设置默认语言
+    fontconfig_use_mmap="yes"               # 是否使用 mmap
+)
 ```
+
+更多配置选项请参考 [fontconfig 文档](https://www.freedesktop.org/software/fontconfig/fontconfig-user.html)。
 
 ### 构建说明
 
@@ -110,7 +112,7 @@ FONTCONFIG_USE_MMAP: str
    # 安装
    xmake install
    # 安装到当前虚拟环境
-   uv sync --reinstall-package nonebot-plugin-htmlkit
+   uv sync --reinstall-package htmlkit
    ```
 
    如果对 [litehtml](./litehtml) 做了修改，则需要重新构建它：
@@ -123,9 +125,9 @@ FONTCONFIG_USE_MMAP: str
    # 重新构建并安装
    xmake build
    xmake install
-   uv sync --reinstall-package nonebot-plugin-htmlkit
+   uv sync --reinstall-package htmlkit
    ```
 
 #### 许可证
 
-本插件的 [Python 部分](./nonebot_plugin_htmlkit) 在 MIT 许可证下发布，[C++ 部分](./core) 在 LGPL-3.0-or-later 许可证下发布。
+本项目的 [Python 部分](./nonebot_plugin_htmlkit) 在 MIT 许可证下发布，[C++ 部分](./core) 在 LGPL-3.0-or-later 许可证下发布。

@@ -33,7 +33,7 @@ FORMATS = ["png", "jpeg"]
 async def test_render_and_verify(
     html_id, html_src, image_format, regen_ref, output_img_dir, refit
 ):
-    from nonebot_plugin_htmlkit import html_to_pic
+    from htmlkit import html_to_pic
 
     img_bytes = await html_to_pic(
         html_src, image_format=image_format, allow_refit=refit
@@ -106,7 +106,7 @@ async def test_markdown_render_and_verify(
     image_format,
     refit,
 ):
-    from nonebot_plugin_htmlkit import md_to_pic
+    from htmlkit import md_to_pic
 
     img_bytes = await md_to_pic(
         MARKDOWN_SOURCE, image_format=image_format, allow_refit=refit

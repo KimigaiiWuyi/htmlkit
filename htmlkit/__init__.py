@@ -1,6 +1,7 @@
 from asyncio import get_running_loop, run_coroutine_threadsafe
 import base64
 from collections.abc import Callable, Coroutine, Mapping, Sequence
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -10,50 +11,32 @@ import aiofiles
 import jinja2
 import markdown
 
-import nonebot
-from nonebot.drivers import HTTPClientMixin, Request
-from nonebot.log import logger
-from nonebot.plugin import PluginMetadata, get_plugin_config
-
 from . import config, core
 from .config import FcConfig
 
-__plugin_meta__ = PluginMetadata(
-    name="nonebot-plugin-htmlkit",
-    description="轻量级的 HTML 渲染工具",
-    usage="",
-    type="library",
-    homepage="https://github.com/nonebot/plugin-htmlkit",
-    extra={},
-)
-
-driver = nonebot.get_driver()
-session = None
+logger = logging.getLogger(__name__)
 
 
-def init_fontconfig(**kwargs: Any):
+def init_fontconfig(fontconfig_path: str | None = None, fontconfig_file: str | None = None, **kwargs: Any):
+    """Initialize fontconfig with the given configuration.
+    
+    Args:
+        fontconfig_path: Path to fontconfig directory
+        fontconfig_file: Path to fontconfig file
+        **kwargs: Additional fontconfig configuration options
+    """
     logger.info("Initializing fontconfig...")
-    with config.set_fc_environ(get_plugin_config(FcConfig)):
+    
+    # Create FcConfig from provided parameters
+    fc_config = FcConfig(
+        fontconfig_path=fontconfig_path,
+        fontconfig_file=fontconfig_file,
+        **{k: v for k, v in kwargs.items() if v is not None}
+    )
+    
+    with config.set_fc_environ(fc_config):
         core._init_fontconfig_internal()  # pyright: ignore[reportPrivateUsage]
     logger.info("Fontconfig initialized.")
-
-
-@driver.on_startup
-async def _():
-    global session
-
-    init_fontconfig()
-
-    try:
-        if isinstance(driver, HTTPClientMixin):
-            driver_session = driver.get_session()
-            await driver_session.setup()
-            session = driver_session
-            logger.info("Got HTTP session.")
-    except Exception as e:
-        logger.opt(exception=e).error(
-            "Error while getting HTTP session and setting up."
-        )
 
 
 ImgFetchFn = Callable[[str], Coroutine[Any, Any, bytes | None]]
@@ -88,8 +71,9 @@ async def data_scheme_img_fetcher(url: str) -> bytes | None:
             else:
                 return unquote(data).encode("utf-8")
         except Exception as e:
-            logger.opt(exception=e).warning(
-                f"Failed to decode data scheme URL: {_crop_str(url)}"
+            logger.warning(
+                f"Failed to decode data scheme URL: {_crop_str(url)}",
+                exc_info=e
             )
     return None
 
@@ -102,37 +86,45 @@ async def filesystem_img_fetcher(url: str) -> bytes | None:
                 async with aiofiles.open(path, "rb") as f:
                     return await f.read()
             except Exception as e:
-                logger.opt(exception=e).warning(
-                    f"Failed to read local file {_crop_str(path)}"
+                logger.warning(
+                    f"Failed to read local file {_crop_str(path)}",
+                    exc_info=e
                 )
     return None
 
 
-async def network_img_fetcher(url: str) -> bytes | None:
-    if session is None:
-        logger.critical(
-            "Driver does not support HTTP requests. "
-            "Please initialize NoneBot with HTTP client drivers like HTTPX or AIOHTTP."
-        )
-        return None
+async def network_img_fetcher(url: str, *, session=None) -> bytes | None:
     try:
-        response = await session.request(Request("GET", url))
-        if isinstance(response.content, bytes):
-            return response.content
+        if session is not None:
+            # Use provided session for HTTP requests
+            response = await session.request(url)
+            if isinstance(response.content, bytes):
+                return response.content
+        else:
+            # Fallback to aiohttp if available
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.get(url) as response:
+                        return await response.read()
+            except ImportError:
+                logger.warning(
+                    "No HTTP client available. Install aiohttp or provide a session."
+                )
         return None
     except Exception as e:
-        logger.opt(exception=e).warning(f"Failed to fetch resource from {url}")
+        logger.warning(f"Failed to fetch resource from {url}", exc_info=e)
     return None
 
 
-async def combined_img_fetcher(url: str) -> bytes | None:
+async def combined_img_fetcher(url: str, *, session=None) -> bytes | None:
     content = await data_scheme_img_fetcher(url)
     if content is not None:
         return content
     content = await filesystem_img_fetcher(url)
     if content is not None:
         return content
-    return await network_img_fetcher(url)
+    return await network_img_fetcher(url, session=session)
 
 
 async def data_scheme_css_fetcher(url: str) -> str | None:
@@ -144,8 +136,9 @@ async def data_scheme_css_fetcher(url: str) -> str | None:
             else:
                 return unquote(data)
         except Exception as e:
-            logger.opt(exception=e).warning(
-                f"Failed to decode data scheme URL: {_crop_str(url)}"
+            logger.warning(
+                f"Failed to decode data scheme URL: {_crop_str(url)}",
+                exc_info=e
             )
     return None
 
@@ -158,44 +151,70 @@ async def filesystem_css_fetcher(url: str) -> str | None:
                 async with aiofiles.open(path, encoding="utf-8") as f:
                     return await f.read()
             except Exception as e:
-                logger.opt(exception=e).warning(
-                    f"Failed to read local CSS file {_crop_str(path)}"
+                logger.warning(
+                    f"Failed to read local CSS file {_crop_str(path)}",
+                    exc_info=e
                 )
     return None
 
 
-async def network_css_fetcher(url: str) -> str | None:
-    if session is None:
-        logger.critical(
-            "Driver does not support HTTP requests. "
-            "Please initialize NoneBot with HTTP client drivers like HTTPX or AIOHTTP."
-        )
-        return None
+async def network_css_fetcher(url: str, *, session=None) -> str | None:
     try:
-        response = await session.request(Request("GET", url))
-        if isinstance(response.content, bytes):
+        if session is not None:
+            # Use provided session for HTTP requests
+            response = await session.request(url)
+            if isinstance(response.content, bytes):
+                try:
+                    return response.content.decode("utf-8")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to decode CSS from {_crop_str(url)}",
+                        exc_info=e
+                    )
+        else:
+            # Fallback to aiohttp if available
             try:
-                return response.content.decode("utf-8")
-            except Exception as e:
-                logger.opt(exception=e).warning(
-                    f"Failed to decode CSS from {_crop_str(url)}"
+                import aiohttp
+                async with aiohttp.ClientSession() as sess:
+                    async with sess.get(url) as response:
+                        return await response.text()
+            except ImportError:
+                logger.warning(
+                    "No HTTP client available. Install aiohttp or provide a session."
                 )
         return None
     except Exception as e:
-        logger.opt(exception=e).warning(
-            f"Failed to fetch CSS resource from {_crop_str(url)}"
+        logger.warning(
+            f"Failed to fetch CSS resource from {_crop_str(url)}",
+            exc_info=e
         )
     return None
 
 
-async def combined_css_fetcher(url: str) -> str | None:
+async def combined_css_fetcher(url: str, *, session=None) -> str | None:
     content = await data_scheme_css_fetcher(url)
     if content is not None:
         return content
     content = await filesystem_css_fetcher(url)
     if content is not None:
         return content
-    return await network_css_fetcher(url)
+    return await network_css_fetcher(url, session=session)
+
+
+def _default_exception_handler(exc_type: type[BaseException], exc_value: BaseException, exc_traceback: Any):
+    """Default exception handler for rendering errors."""
+    logger.error(
+        "Exception in html_to_pic: ",
+        exc_info=(exc_type, exc_value, exc_traceback)
+    )
+
+
+def _default_exception_handler_debug(exc_type: type[BaseException], exc_value: BaseException, exc_traceback: Any):
+    """Default exception handler for debug rendering errors."""
+    logger.error(
+        "Exception in debug_html_to_pic: ",
+        exc_info=(exc_type, exc_value, exc_traceback)
+    )
 
 
 async def html_to_pic(
@@ -216,6 +235,7 @@ async def html_to_pic(
     css_fetch_fn: CSSFetchFn = combined_css_fetcher,
     native_data_scheme: bool = True,
     urljoin_fn: Callable[[str, str], str] = urljoin,
+    exception_handler: Callable[[type, BaseException, Any], None] = _default_exception_handler,
 ) -> bytes:
     """
     将 HTML 渲染为图片。
@@ -237,6 +257,7 @@ async def html_to_pic(
         css_fetch_fn (CSSFetchFn, optional): CSS获取函数
         native_data_scheme (bool, optional): 是否使用原生代码解码 base64 data scheme URL
         urljoin_fn (Callable, optional): urljoin函数
+        exception_handler (Callable, optional): 异常处理函数
 
     Returns:
         bytes: 渲染后的图片字节
@@ -254,9 +275,7 @@ async def html_to_pic(
         -1 if image_format == "png" else jpeg_quality,
         lang,
         culture,
-        lambda exc_type, exc_value, exc_traceback: nonebot.logger.opt(
-            exception=(exc_type, exc_value, exc_traceback)
-        ).error("Exception in html_to_pic: "),
+        exception_handler,
         run_coroutine_threadsafe,
         urljoin_fn,
         loop,
@@ -285,6 +304,7 @@ async def debug_html_to_pic(
     css_fetch_fn: CSSFetchFn = combined_css_fetcher,
     native_data_scheme: bool = True,
     urljoin_fn: Callable[[str, str], str] = urljoin,
+    exception_handler: Callable[[type, BaseException, Any], None] = _default_exception_handler_debug,
 ) -> tuple[bytes, str]:
     """
     将 HTML 渲染为图片以及可调试的 HTML 字符串。
@@ -306,6 +326,7 @@ async def debug_html_to_pic(
         css_fetch_fn (CSSFetchFn, optional): CSS获取函数
         native_data_scheme (bool, optional): 是否使用原生代码解码 base64 data scheme URL
         urljoin_fn (Callable, optional): urljoin函数
+        exception_handler (Callable, optional): 异常处理函数
 
     Returns:
         tuple[bytes, str]: 渲染后的图片字节和调试用 HTML 字符串
@@ -323,9 +344,7 @@ async def debug_html_to_pic(
         -1 if image_format == "png" else jpeg_quality,
         lang,
         culture,
-        lambda exc_type, exc, tb: nonebot.logger.opt(
-            exception=(exc_type, exc, tb)
-        ).error("Exception in html_to_pic: "),
+        exception_handler,
         run_coroutine_threadsafe,
         urljoin_fn,
         loop,

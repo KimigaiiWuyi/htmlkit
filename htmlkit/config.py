@@ -1,13 +1,12 @@
 from contextlib import contextmanager
 import os
+from typing import get_type_hints
 
 from pydantic import BaseModel, Field
 
-from nonebot.compat import model_fields
-
 
 class FcConfig(BaseModel):
-    """覆盖 Fontconfig 的配置选项
+    """Fontconfig 配置选项
 
     参考 https://fontconfig.pages.freedesktop.org/fontconfig/fontconfig-user
     """
@@ -18,7 +17,7 @@ class FcConfig(BaseModel):
         default=None, description="覆盖默认的 sysroot"
     )
     fc_debug: str | None = Field(default=None, description="设置 debug 级别")
-    fc_dbg_match_filter: str | None = Field(
+    fcdbg_match_filter: str | None = Field(
         default=None, description="当 FC_DEBUG 设置了 MATCH2 时，过滤 debug 输出"
     )
     fc_lang: str | None = Field(
@@ -32,13 +31,22 @@ class FcConfig(BaseModel):
 @contextmanager
 def set_fc_environ(config: FcConfig):
     old_values = {}
-    fields = model_fields(FcConfig)
-    for field in fields:
-        name = field.name.upper()
-        value = getattr(config, field.name)
+    # Get field names from the model's __annotations__ or model_fields if available
+    try:
+        from pydantic import BaseModel
+        if hasattr(config, 'model_fields'):
+            field_names = config.model_fields.keys()
+        else:
+            field_names = get_type_hints(type(config)).keys()
+    except:
+        field_names = get_type_hints(type(config)).keys()
+    
+    for field_name in field_names:
+        value = getattr(config, field_name)
         if value is not None:
-            old_values[name] = os.environ.get(name)
-            os.environ[name] = value
+            env_name = field_name.upper()
+            old_values[env_name] = os.environ.get(env_name)
+            os.environ[env_name] = value
     try:
         yield
     finally:

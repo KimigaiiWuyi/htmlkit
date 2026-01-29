@@ -22,7 +22,7 @@ FORMATS = ["png", "jpeg"]
 async def test_render_image_from_data_scheme(
     html_name, image_format, regen_ref, output_img_dir, native
 ):
-    from nonebot_plugin_htmlkit import (
+    from htmlkit import (
         combined_css_fetcher,
         combined_img_fetcher,
         html_to_pic,

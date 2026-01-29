@@ -1,14 +1,13 @@
 [project]
-name = "nonebot-plugin-htmlkit"
-version = "0.1.0-rc5"
-description = "Lightweight HTML rendering plugin for NoneBot"
+name = "htmlkit"
+version = "0.1.0"
+description = "Lightweight HTML rendering library based on litehtml"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "aiofiles>=0.8.0",
     "jinja2>=3.0.3",
     "markdown>=3.3.6",
-    "nonebot2~=2.3",
     "pygments>=2.10.0",
     "pymdown-extensions>=9.1",
 ]
@@ -16,7 +15,7 @@ maintainers = [
   { name = "Nyuan Zhang", email = "blueglassblock@outlook.com"}
 ]
 license = "MIT AND LGPL-3.0-or-later"
-keywords = ["nonebot", "nonebot2", "htmlkit", "litehtml", "html"]
+keywords = ["htmlkit", "litehtml", "html", "rendering"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
@@ -52,8 +51,6 @@ build = [
     "wheel>=0.45.1",
 ]
 test = [
-    "nonebot2[httpx]>=2.4.3",
-    "nonebug>=0.4.3",
     "numpy>=2.2.6",
     "pillow>=11.3.0",
     "pytest>=8.4.1",

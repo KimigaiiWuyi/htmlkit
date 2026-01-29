@@ -16,7 +16,7 @@ WEBPAGES = [
 @pytest.mark.parametrize("webpage", WEBPAGES)
 @pytest.mark.parametrize("refit", [True, False])
 async def test_render_webpage(image_format, regen_ref, output_img_dir, webpage, refit):
-    from nonebot_plugin_htmlkit import html_to_pic
+    from htmlkit import html_to_pic
 
     page_path = Path(__file__).parent / "webpages" / webpage / "index.html"
     async with aiofiles.open(page_path, encoding="utf-8") as f:
