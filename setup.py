@@ -70,6 +70,14 @@ class XmakeBuildExt(build_ext):
         core_dylib = bindist_dir / "core.dylib"
         if not core_dylib.exists():
             ensure_submodules(self)
+
+            print(f"DEBUG: Current PATH: {os.environ.get('PATH')}")
+            try:
+                check_call(["xmake", "--version"])
+            except Exception as e:
+                print(f"ERROR: xmake not found or failed to run: {e}")
+                raise
+
             config_mode = os.environ.get("XMAKE_CONFIG_MODE", "releasedbg")
             config_cmd = ["xmake", "config", "-D", "-m", config_mode, "-y"]
             if sys.platform == "darwin":

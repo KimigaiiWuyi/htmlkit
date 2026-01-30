@@ -20,7 +20,8 @@ set_license("LGPL-3.0-or-later")
 
 add_repositories("my-repo repo")
 
-add_requires("litehtml", "pango", "libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
+add_requires("litehtml", {configs = {utf8 = true}})
+add_requires("pango", "libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
 set_languages("c++17")
 add_requires("libavif", {configs = { aom = true }})
 add_requires("cairo", {configs = { xlib = false }})

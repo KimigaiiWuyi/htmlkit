@@ -1,6 +1,8 @@
 name: Build Wheels
 on:
   push:
+    tags:
+      - 'v*' # 建议只在打 tag 时触发发布，平时可以跑测试
   workflow_dispatch:
   pull_request:
     branches:
@@ -16,25 +18,27 @@ jobs:
         python: [cp310, cp312, cp313t, cp314t]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4 # v5 不存在，建议用 v4
         with:
           submodules: recursive
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          cache-suffix: ${{ matrix.python }}-macosx_arm64
-          cache-dependency-glob: uv.lock
-      - name: Install Xmake
-        run: brew install xmake
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: ~/.xmake
-          key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
+      
+      - name: Install Build Tools & Deps
+        run: |
+          brew update
+          brew install xmake pkg-config ninja
+          # 预装依赖库，极大加速构建并减少错误
+          brew install pango cairo libjpeg-turbo libwebp giflib aom
+
+      # 移除 uv 的 cache，因为 wheel 构建是在隔离环境中进行的
+      # 移除 xmake cache，在 CI 中缓存二进制构建产物经常导致 abi 不兼容问题，建议先跑通再优化
+
       - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
+        uses: pypa/cibuildwheel@v2.22.0 # 建议使用最新稳定版
         env:
           CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
+          # 开启详细日志，这样 xmake build -vD 的输出才能看见
+          CIBW_BUILD_VERBOSITY: 1 
+      
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-macosx_arm64
@@ -49,27 +53,21 @@ jobs:
         python: [cp310, cp312, cp313t, cp314t]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          cache-suffix: ${{ matrix.python }}-win_amd64
-          cache-dependency-glob: uv.lock
+      
       - name: Install Xmake
-        uses: MinoruSekine/setup-scoop@v4.0.2
+        uses: MinoruSekine/setup-scoop@v4.0.1
         with:
           apps: xmake
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: ~/AppData/Local/.xmake
-          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
+
       - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
+        uses: pypa/cibuildwheel@v2.22.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
+          CIBW_BUILD_VERBOSITY: 1
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-win_amd64
@@ -77,43 +75,45 @@ jobs:
 
   build_linux:
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
-    runs-on: ubuntu-24.04${{ matrix.archs == 'aarch64' && '-arm' || '' }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         python: [cp310, cp312, cp313t, cp314t]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
+        exclude:
+          # aarch64 在 ubuntu runner 上是用 qemu 模拟的，非常慢，建议先跑 x86_64 验证
+          # 如果需要跑 aarch64，请做好跑 1 小时以上的准备
+          - platform: musllinux
+            archs: aarch64
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Cache uv
-        uses: actions/cache@v4
+
+      - name: Setup QEMU
+        if: matrix.archs == 'aarch64'
+        uses: docker/setup-qemu-action@v3
         with:
-          path: /tmp/setup-uv-cache
-          key: setup-uv-${{ hashFiles('uv.lock') }}-${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
-      - name: Cache tools
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.local
-          key: tools-${{ matrix.platform }}_${{ matrix.archs }}
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: |
-            /tmp/.xmake
-            !/tmp/.xmake/**/.git
-          key: xmake-${{ matrix.platform }}_${{ matrix.archs }}-${{ hashFiles('xmake.lua') }}
+          platforms: arm64
+
       - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
+        uses: pypa/cibuildwheel@v2.22.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
-      - name: Chown Xmake cache
-        run: |
-          shopt -s globstar
-          sudo rm -rf /tmp/.xmake/**/.git  # FIXME: workaround for https://github.com/actions/toolkit/issues/2155
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_BEFORE_ALL_LINUX: >
+            yum install -y wget unzip git gcc-c++ make &&
+            wget https://xmake.io/shget.text &&
+            chmod +x shget.text &&
+            ./shget.text &&
+            mv ~/.local/bin/xmake /usr/bin/xmake &&
+            xmake --version
+          # 确保 xmake 可以以 root 运行
+          CIBW_ENVIRONMENT_LINUX: "XMAKE_ROOT=y"
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
@@ -123,11 +123,16 @@ jobs:
     name: Build Source Distribution
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v5
+      
+      # sdist 打包时也需要 xmake 存在（因为 EggInfo 会运行 setup.py）
+      - name: Install Xmake
+        run: curl -fsSL https://xmake.io/shget.text | bash && echo "$HOME/.local/bin" >> $GITHUB_PATH
+
       - name: Build sdist
         run: uv build --sdist
       - uses: actions/upload-artifact@v4
@@ -136,31 +141,30 @@ jobs:
           path: dist/*.tar.gz
 
   package:
-    name: Package + Publish to PyPI
+    name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: [build_macosx, build_win, build_linux, sdist]
     permissions:
-      id-token: write  # required for OIDC trusted publisher
+      id-token: write
       contents: read
     steps:
       - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
-          path: dist
           pattern: wheel-*
+          path: dist
           merge-multiple: true
       - name: Download sdist
         uses: actions/download-artifact@v4
         with:
           name: sdist
           path: dist
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/*
+          merge-multiple: true # sdist 也合并到 dist 目录
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v5
+      
       - name: Publish to PyPI
+        # 只有打 tag 时才发布，避免 merge request 也发布
         if: startsWith(github.ref, 'refs/tags/')
         run: uv publish --trusted-publishing always
