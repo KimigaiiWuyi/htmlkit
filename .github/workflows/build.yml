@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp312]
 
     steps:
       - uses: actions/checkout@v4 # v5 不存在，建议用 v4
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp312]
 
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp312]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
         exclude:
