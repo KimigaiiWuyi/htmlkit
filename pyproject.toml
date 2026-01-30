@@ -116,7 +116,6 @@ build-frontend = "build[uv]"
 manylinux-x86_64-image = "manylinux_2_34"
 manylinux-aarch64-image = "manylinux_2_34"
 test-command = "pytest"
-test-sources = ["pyproject.toml", "tests/"]
 test-groups = ["test"]
 test-environment = { PYTHON_GIL = "0" }
 
