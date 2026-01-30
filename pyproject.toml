@@ -115,9 +115,6 @@ enable = ["cpython-freethreading"]
 build-frontend = "build[uv]"
 manylinux-x86_64-image = "manylinux_2_34"
 manylinux-aarch64-image = "manylinux_2_34"
-test-command = "pytest"
-test-groups = ["test"]
-test-environment = { PYTHON_GIL = "0" }
 
 [tool.cibuildwheel.environment]
 XMAKE_CONFIG_MODE = "release"
