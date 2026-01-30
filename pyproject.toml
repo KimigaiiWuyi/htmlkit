@@ -113,8 +113,6 @@ asyncio_default_fixture_loop_scope = "session"
 [tool.cibuildwheel]
 enable = ["cpython-freethreading"]
 build-frontend = "build[uv]"
-manylinux-x86_64-image = "manylinux_2_34"
-manylinux-aarch64-image = "manylinux_2_34"
 
 [tool.cibuildwheel.environment]
 XMAKE_CONFIG_MODE = "release"
