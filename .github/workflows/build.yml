@@ -106,8 +106,21 @@ jobs:
             /tmp/.xmake
             !/tmp/.xmake/**/.git
           key: xmake-${{ matrix.platform }}_${{ matrix.archs }}-${{ hashFiles('xmake.lua') }}
-      - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
+      - name: Build wheel (manylinux)
+        if: contains(matrix.platform, 'manylinux')
+        uses: pypa/cibuildwheel@v2.22.0
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
+          CIBW_BEFORE_ALL: |
+            curl -fsSL https://xmake.io/shget.text | bash
+          CIBW_ENVIRONMENT: |
+            XMAKE_ROOT=y
+            PATH=$PATH:$HOME/.local/bin
+            LDFLAGS="-lpthread"
+            CFLAGS="-pthread"
+      - name: Build wheel (musllinux)
+        if: contains(matrix.platform, 'musllinux')
+        uses: pypa/cibuildwheel@v2.22.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
       - name: Chown Xmake cache

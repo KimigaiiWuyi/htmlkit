@@ -20,6 +20,7 @@ set_license("LGPL-3.0-or-later")
 
 add_repositories("my-repo repo")
 
+add_requires("libintl", {configs = {shared = false}})
 add_requires("litehtml", {configs = {utf8 = true}})
 add_requires("pango", "libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
 set_languages("c++17")
@@ -29,6 +30,8 @@ add_requireconfs("**.cairo", { override = true, configs = { xlib = false } })
 add_requires("python", { system = true, version = ">=3.10", configs = { headeronly = not is_plat("windows"), shared = true } })
 add_requireconfs("**.python", { override = true, configs = { headeronly = true, shared = true } })
 add_requireconfs("**|python|cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
+
+
 function require_htmlkit()
     if is_plat("linux") then
         if is_arch("x86_64") then

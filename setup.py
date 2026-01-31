@@ -5,7 +5,7 @@ from shutil import copyfile
 from subprocess import check_call, check_output
 import sys
 import sysconfig
-
+from shutil import copyfile
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext, get_abi3_suffix
 from setuptools.command.egg_info import egg_info
@@ -70,22 +70,43 @@ class XmakeBuildExt(build_ext):
         core_dylib = bindist_dir / "core.dylib"
         if not core_dylib.exists():
             ensure_submodules(self)
-
-            print(f"DEBUG: Current PATH: {os.environ.get('PATH')}")
-            try:
-                check_call(["xmake", "--version"])
-            except Exception as e:
-                print(f"ERROR: xmake not found or failed to run: {e}")
-                raise
-
             config_mode = os.environ.get("XMAKE_CONFIG_MODE", "releasedbg")
-            config_cmd = ["xmake", "config", "-D", "-m", config_mode, "-y"]
+
+            xmake_path = os.path.expanduser("~/.local/bin/xmake")
+
+            # 如果绝对路径不存在，再尝试从 PATH 找
+            if not os.path.exists(xmake_path):
+                from shutil import which
+                xmake_path = which("xmake") or "xmake"
+
+            print(f"DEBUG: Using xmake at: {xmake_path}")
+
+            # 打印 xmake 路径和版本
+            print(f"Using xmake at: {xmake_path}")
+            check_call([xmake_path, "--version"])
+
+            # 配置命令
+            config_cmd = [
+                xmake_path,
+                "config",
+                "-D",
+                "-m",
+                config_mode,
+                "-y",
+                "--ldflags=-lpthread",
+                "--cxflags=-pthread",
+                "--cflags=-pthread"
+            ]
+
             if sys.platform == "darwin":
                 target_minver = os.environ.get("MACOSX_DEPLOYMENT_TARGET", "12.0")
                 config_cmd += [f"--target_minver={target_minver}"]
             check_call(config_cmd)
-            check_call(["xmake", "build", "-vD", "core"])
-            check_call(["xmake", "install"])
+
+            # 构建 core
+            check_call([xmake_path, "build", "-vD", "core"])
+            check_call([xmake_path, "install"])
+
         dylib_target = build_target.joinpath("core.so").with_suffix(get_abi3_suffix())
         copyfile(core_dylib, dylib_target)
 
