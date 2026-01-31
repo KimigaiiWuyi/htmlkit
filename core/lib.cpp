@@ -116,7 +116,7 @@ static PyObject* render(PyObject* mod, PyObject* args) {
             width = best_width;
             doc->render(width);
         }
-        int content_height = doc->content_height();
+        int content_height = doc->height();
         if (width < 1 || content_height < 1) {
             width = std::max(1, width);
             content_height = std::max(1, content_height);
