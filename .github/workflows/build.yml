@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp312]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v5
@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp312]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v5
@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp312]
+        python: [cp310, cp312, cp313t, cp314t]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
 
