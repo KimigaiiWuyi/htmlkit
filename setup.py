@@ -5,7 +5,6 @@ from shutil import copyfile
 from subprocess import check_call, check_output
 import sys
 import sysconfig
-from shutil import copyfile
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext, get_abi3_suffix
 from setuptools.command.egg_info import egg_info
@@ -78,11 +77,11 @@ class XmakeBuildExt(build_ext):
 
         core_dylib = bindist_dir / core_lib_name
 
-        # fallback: if xmake ever forces .dylib on all platforms
+        # fallback: glob for any core.* if the expected name is missing
         if not core_dylib.exists():
-            fallback = bindist_dir / "core.dylib"
-            if fallback.exists():
-                core_dylib = fallback
+            candidates = list(bindist_dir.glob("core.*"))
+            if candidates:
+                core_dylib = candidates[0]
 
         if not core_dylib.exists():
             ensure_submodules(self)
@@ -95,9 +94,6 @@ class XmakeBuildExt(build_ext):
                 from shutil import which
                 xmake_path = which("xmake") or "xmake"
 
-            print(f"DEBUG: Using xmake at: {xmake_path}")
-
-            # 打印 xmake 路径和版本
             print(f"Using xmake at: {xmake_path}")
             check_call([xmake_path, "--version"])
 
