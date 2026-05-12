@@ -10,6 +10,7 @@ jobs:
   build_macosx_arm64:
     name: Build wheel for ${{ matrix.python }}-macosx_arm64
     runs-on: macos-14
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +32,11 @@ jobs:
         with:
           path: ~/.xmake
           key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for SourceForge 404 (giflib)
+        run: |
+          mkdir -p ~/.xmake/searchdirs
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+          xmake g --pkg_searchdirs=~/.xmake/searchdirs
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
@@ -43,6 +49,7 @@ jobs:
   build_macosx_x86_64:
     name: Build wheel for ${{ matrix.python }}-macosx_x86_64
     runs-on: macos-13
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,6 +71,11 @@ jobs:
         with:
           path: ~/.xmake
           key: xmake-macosx_x86_64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for SourceForge 404 (giflib)
+        run: |
+          mkdir -p ~/.xmake/searchdirs
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+          xmake g --pkg_searchdirs=~/.xmake/searchdirs
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
@@ -76,6 +88,7 @@ jobs:
   build_win:
     name: Build wheel for ${{ matrix.python }}-win_amd64
     runs-on: windows-2022
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
     strategy:
       fail-fast: false
       matrix:
@@ -142,7 +155,7 @@ jobs:
           key: xmake-${{ matrix.platform }}_${{ matrix.archs }}-${{ hashFiles('xmake.lua') }}
       - name: Build wheel (manylinux)
         if: contains(matrix.platform, 'manylinux')
-        uses: pypa/cibuildwheel@v2.22.0
+        uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
@@ -154,7 +167,7 @@ jobs:
             CFLAGS="-pthread"
       - name: Build wheel (musllinux)
         if: contains(matrix.platform, 'musllinux')
-        uses: pypa/cibuildwheel@v2.22.0
+        uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
       - name: Chown Xmake cache
