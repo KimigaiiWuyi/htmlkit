@@ -112,6 +112,12 @@ jobs:
         with:
           path: ~/AppData/Local/.xmake
           key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for SourceForge 404 (giflib)
+        shell: bash
+        run: |
+          mkdir -p ~/AppData/Local/.xmake/searchdirs
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz
+          xmake g --pkg_searchdirs="~/AppData/Local/.xmake/searchdirs"
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
@@ -160,6 +166,9 @@ jobs:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
             curl -fsSL https://xmake.io/shget.text | bash
+            mkdir -p ~/.xmake/searchdirs
+            curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+            ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs
           CIBW_ENVIRONMENT: |
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
@@ -170,6 +179,17 @@ jobs:
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
+          CIBW_BEFORE_ALL: |
+            apk add curl bash
+            curl -fsSL https://xmake.io/shget.text | bash
+            mkdir -p ~/.xmake/searchdirs
+            curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+            ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs
+          CIBW_ENVIRONMENT: |
+            XMAKE_ROOT=y
+            PATH=$PATH:$HOME/.local/bin
+            LDFLAGS="-lpthread"
+            CFLAGS="-pthread"
       - name: Chown Xmake cache
         run: |
           shopt -s globstar
