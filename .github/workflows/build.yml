@@ -180,8 +180,10 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
-            apk add curl bash
+            apk add curl bash git patch unzip tar
+            apk add 7zip || apk add p7zip || true
             curl -fsSL https://xmake.io/shget.text | bash
+            ~/.local/bin/xmake repo -u
             mkdir -p ~/.xmake/searchdirs
             curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
             ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs

@@ -67,7 +67,17 @@ class XmakeBuildExt(build_ext):
         build_target = Path(self.build_lib) / "htmlkit"
         build_target.mkdir(parents=True, exist_ok=True)
         bindist_dir = Path("bindist")
-        core_dylib = bindist_dir / "core.dylib"
+
+        # 根据不同操作系统，动态判断动态库的后缀
+        if sys.platform == "win32":
+            core_lib_name = "core.dll"
+        elif sys.platform == "darwin":
+            core_lib_name = "core.dylib"
+        else:
+            core_lib_name = "core.so"
+
+        core_dylib = bindist_dir / core_lib_name
+
         if not core_dylib.exists():
             ensure_submodules(self)
             config_mode = os.environ.get("XMAKE_CONFIG_MODE", "releasedbg")
@@ -85,6 +95,19 @@ class XmakeBuildExt(build_ext):
             print(f"Using xmake at: {xmake_path}")
             check_call([xmake_path, "--version"])
 
+            # 预下载 giflib 以绕过 SourceForge 404 问题
+            searchdirs = Path.home() / ".xmake" / "searchdirs"
+            searchdirs.mkdir(parents=True, exist_ok=True)
+            giflib_path = searchdirs / "giflib-5.2.2.tar.gz"
+            if not giflib_path.exists():
+                print(f"Pre-downloading giflib to {searchdirs} ...")
+                check_call([
+                    "curl", "-L", "-f",
+                    "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz",
+                    "-o", str(giflib_path)
+                ])
+            check_call([xmake_path, "g", "--pkg_searchdirs=" + str(searchdirs)])
+
             # 配置命令
             config_cmd = [
                 xmake_path,
@@ -92,21 +115,28 @@ class XmakeBuildExt(build_ext):
                 "-D",
                 "-m",
                 config_mode,
-                "-y",
-                "--ldflags=-lpthread",
-                "--cxflags=-pthread",
-                "--cflags=-pthread"
+                "-y"
             ]
+
+            # 只在非 Windows 平台才强制传入 pthread 参数
+            if sys.platform != "win32":
+                config_cmd.extend([
+                    "--ldflags=-lpthread",
+                    "--cxflags=-pthread",
+                    "--cflags=-pthread"
+                ])
 
             if sys.platform == "darwin":
                 target_minver = os.environ.get("MACOSX_DEPLOYMENT_TARGET", "12.0")
                 config_cmd += [f"--target_minver={target_minver}"]
+
             check_call(config_cmd)
 
             # 构建 core
             check_call([xmake_path, "build", "-vD", "core"])
             check_call([xmake_path, "install"])
 
+        # get_abi3_suffix 会自动将 Windows 的后缀处理成 .pyd，将 Linux/Mac 处理成 .abi3.so
         dylib_target = build_target.joinpath("core.so").with_suffix(get_abi3_suffix())
         copyfile(core_dylib, dylib_target)
 
