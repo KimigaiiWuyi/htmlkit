@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp311, cp312, cp313, cp313t, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v5
@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp311, cp312, cp313, cp313t, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v5
@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp311, cp312, cp313, cp313t, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
 
@@ -181,9 +181,19 @@ jobs:
       - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: wheels
           pattern: wheel-*
-          merge-multiple: true
+      - name: Collect wheels into dist
+        run: |
+          mkdir -p dist
+          find wheels -name '*.whl' -exec cp -n {} dist/ \;
+      - name: Verify wheel integrity
+        run: |
+          for whl in dist/*.whl; do
+            python3 -m zipfile -t "$whl" || { echo "CORRUPT: $whl"; exit 1; }
+          done
+          echo "All wheels passed integrity check"
+          ls -la dist/
       - name: Download sdist
         uses: actions/download-artifact@v4
         with:

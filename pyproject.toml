@@ -1,6 +1,6 @@
 [project]
 name = "pyhtmlrender"
-version = "0.1.1"
+version = "0.1.2"
 description = "Lightweight HTML rendering library based on litehtml"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -111,8 +111,13 @@ asyncio_default_fixture_loop_scope = "session"
 
 
 [tool.cibuildwheel]
+# abi3 strategy: cp310-abi3 covers 3.10/3.11, cp312-abi3 covers 3.12/3.13.
+# Skip cp311/cp313 to avoid duplicate abi3 wheel filenames that cause
+# artifact merge corruption (PyPI 400 Bad Request: Mis-matched data size).
+# Free-threaded builds (cp313t/cp314t) produce version-specific wheels.
 enable = ["cpython-freethreading"]
 build-frontend = "build[uv]"
+skip = ["cp311-*", "cp313-*"]
 
 [tool.cibuildwheel.environment]
 XMAKE_CONFIG_MODE = "release"
