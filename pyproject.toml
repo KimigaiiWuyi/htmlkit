@@ -1,6 +1,6 @@
 [project]
-name = "htmlkit"
-version = "0.1.0"
+name = "pyhtmlrender"
+version = "0.1.1"
 description = "Lightweight HTML rendering library based on litehtml"
 readme = "README.md"
 requires-python = ">=3.10"

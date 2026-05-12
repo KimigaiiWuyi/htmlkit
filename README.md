@@ -2,6 +2,10 @@
 
 一个基于 [litehtml](https://github.com/litehtml/litehtml) 的轻量级 HTML 渲染库。
 
+## 原始代码
+
+[nonebot/plugin-htmlkit](https://github.com/nonebot/plugin-htmlkit)
+
 ## 特性
 
 - 基于 [fontconfig](https://www.freedesktop.org/wiki/Software/fontconfig/) 的字体管理, 支持系统字体和自定义字体
@@ -15,7 +19,7 @@
 使用 pip 安装：
 
 ```bash
-pip install htmlkit
+pip install pyhtmlrender
 ```
 
 或者使用其他 Python 包管理器安装。

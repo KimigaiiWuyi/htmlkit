@@ -1,13 +1,20 @@
 name: Build Wheels
 on:
   push:
+    tags:
+      - 'v*'
   workflow_dispatch:
   pull_request:
     branches:
       - master
+    paths:
+      - 'src/**'
+      - 'xmake.lua'
+      - 'pyproject.toml'
 
 jobs:
   build_macosx_arm64:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     name: Build wheel for ${{ matrix.python }}-macosx_arm64
     runs-on: macos-14
     continue-on-error: ${{ contains(matrix.python, 'cp314') }}
@@ -48,6 +55,7 @@ jobs:
 
 
   build_win:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     name: Build wheel for ${{ matrix.python }}-win_amd64
     runs-on: windows-2022
     continue-on-error: ${{ contains(matrix.python, 'cp314') }}
@@ -90,6 +98,7 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build_linux:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
     runs-on: ubuntu-24.04${{ matrix.archs == 'aarch64' && '-arm' || '' }}
     continue-on-error: ${{ contains(matrix.python, 'cp314') }}
