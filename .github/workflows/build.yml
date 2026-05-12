@@ -6,6 +6,9 @@ on:
     branches:
       - master
 
+env:
+  XMAKE_VERSION: "2.9.9"
+
 jobs:
   build_macosx_arm64:
     name: Build wheel for ${{ matrix.python }}-macosx_arm64
@@ -165,7 +168,8 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
-            curl -fsSL https://xmake.io/shget.text | bash
+            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v${XMAKE_VERSION}/xmake-v${XMAKE_VERSION}.gz.run" -o /tmp/xmake.gz.run
+            bash /tmp/xmake.gz.run
             mkdir -p ~/.xmake/searchdirs
             curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
             ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs
@@ -174,6 +178,7 @@ jobs:
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
+            XMAKE_VERSION=${{ env.XMAKE_VERSION }}
       - name: Build wheel (musllinux)
         if: contains(matrix.platform, 'musllinux')
         uses: pypa/cibuildwheel@v3.2.0
@@ -182,7 +187,8 @@ jobs:
           CIBW_BEFORE_ALL: |
             apk add curl bash git patch unzip tar
             apk add 7zip || apk add p7zip || true
-            curl -fsSL https://xmake.io/shget.text | bash
+            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v${XMAKE_VERSION}/xmake-v${XMAKE_VERSION}.gz.run" -o /tmp/xmake.gz.run
+            bash /tmp/xmake.gz.run
             ~/.local/bin/xmake repo -u
             mkdir -p ~/.xmake/searchdirs
             curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
@@ -192,6 +198,7 @@ jobs:
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
+            XMAKE_VERSION=${{ env.XMAKE_VERSION }}
       - name: Chown Xmake cache
         run: |
           shopt -s globstar

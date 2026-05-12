@@ -59,7 +59,13 @@ end
 target("core")
     set_kind("shared")
     set_prefixname("")
-    set_extension(".dylib")
+    if is_plat("windows") then
+        set_extension(".dll")
+    elseif is_plat("macosx") then
+        set_extension(".dylib")
+    else
+        set_extension(".so")
+    end
     set_installdir("bindist")
     set_prefixdir("/", {bindir = ".", libdir = ".", includedir = "."})
     require_htmlkit()

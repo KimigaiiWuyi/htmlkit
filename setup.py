@@ -78,6 +78,12 @@ class XmakeBuildExt(build_ext):
 
         core_dylib = bindist_dir / core_lib_name
 
+        # fallback: if xmake ever forces .dylib on all platforms
+        if not core_dylib.exists():
+            fallback = bindist_dir / "core.dylib"
+            if fallback.exists():
+                core_dylib = fallback
+
         if not core_dylib.exists():
             ensure_submodules(self)
             config_mode = os.environ.get("XMAKE_CONFIG_MODE", "releasedbg")
