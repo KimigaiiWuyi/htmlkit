@@ -22,7 +22,10 @@ add_repositories("my-repo repo")
 
 add_requires("libintl", {configs = {shared = false}})
 add_requires("litehtml", {configs = {utf8 = true}})
-add_requires("pango", "libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
+add_requires("pango", {configs = {shared = false}})
+add_requires("libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
+-- 显式声明 zlib 静态链接，防止 manylinux wheel 中符号被链接器优化掉
+add_requires("zlib", {configs = {shared = false}})
 set_languages("c++17")
 add_requires("libavif", {configs = { aom = true }})
 add_requires("cairo", {configs = { xlib = false }})
@@ -42,6 +45,8 @@ function require_htmlkit()
         end
     end
     add_packages("litehtml", "cairo", "pango", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt")
+    -- 显式添加 zlib 包，防止链接器因 --as-needed / gc-sections 将其优化掉
+    add_packages("zlib")
     add_packages("python", { links = {} })
     add_files("core/*.cpp")
     add_defines("UNICODE", "PY_SSIZE_T_CLEAN")
@@ -53,6 +58,12 @@ function require_htmlkit()
         add_frameworks("CoreText", "CoreGraphics", "CoreFoundation")
         add_ldflags("-undefined", "dynamic_lookup", {force = true})
         add_shflags("-undefined", "dynamic_lookup", {force = true})
+    end
+    if is_plat("linux") then
+        -- 精确强制保留运行时需要的符号，防止链接器因 --as-needed / gc-sections 优化掉
+        -- add_packages("zlib", "pango") 已负责链接 -lz / -lpangoft2-1.0，此处仅保留 -u 强制符号
+        add_ldflags("-Wl,-u,deflateInit2_", {force = true})
+        add_ldflags("-Wl,-u,pango_fc_font_create_base_metrics_for_context", {force = true})
     end
 end
 
