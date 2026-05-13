@@ -1,8 +1,6 @@
 name: Build Wheels
 on:
   push:
-    tags:
-      - 'v*'
   workflow_dispatch:
   pull_request:
     branches:
@@ -13,100 +11,17 @@ on:
       - 'pyproject.toml'
 
 jobs:
-  build_macosx_arm64:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-    name: Build wheel for ${{ matrix.python }}-macosx_arm64
-    runs-on: macos-14
-    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python: [cp310, cp312, cp313t, cp314t]
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          cache-suffix: ${{ matrix.python }}-macosx_arm64
-          cache-dependency-glob: uv.lock
-      - name: Install Xmake
-        run: brew install xmake
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: ~/.xmake
-          key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
-      - name: Workaround for SourceForge 404 (giflib)
-        run: |
-          mkdir -p ~/.xmake/searchdirs
-          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
-          xmake g --pkg_searchdirs=~/.xmake/searchdirs
-      - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.python }}-macosx_arm64
-          path: ./wheelhouse/*.whl
-
-
-  build_win:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
-    name: Build wheel for ${{ matrix.python }}-win_amd64
-    runs-on: windows-2022
-    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
-    strategy:
-      fail-fast: false
-      matrix:
-        python: [cp310, cp312, cp313t, cp314t]
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          cache-suffix: ${{ matrix.python }}-win_amd64
-          cache-dependency-glob: uv.lock
-      - name: Install Xmake
-        uses: MinoruSekine/setup-scoop@v4.0.2
-        with:
-          apps: xmake
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.LOCALAPPDATA }}\.xmake
-          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
-      - name: Workaround for SourceForge 404 (giflib)
-        shell: bash
-        run: |
-          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
-          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
-          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
-      - name: Build wheel
-        uses: pypa/cibuildwheel@v3.2.0
-        env:
-          CIBW_BUILD: ${{ matrix.python }}-win_amd64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.python }}-win_amd64
-          path: ./wheelhouse/*.whl
-
   build_linux:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
     runs-on: ubuntu-24.04${{ matrix.archs == 'aarch64' && '-arm' || '' }}
-    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
-        platform: [manylinux, musllinux]
+        # --- 修改处：只保留 cp312 ---
+        python: [cp312]
+        # 如果你连 aarch64 或 musl 也不想要，可以进一步缩减下面两行
+        platform: [manylinux, musllinux] 
         archs: [x86_64, aarch64]
 
     steps:
@@ -153,29 +68,16 @@ jobs:
           name: wheel-${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           path: ./wheelhouse/*.whl
 
-  sdist:
-    name: Build Source Distribution
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - name: Build sdist
-        run: uv build --sdist
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist/*.tar.gz
+  # 3. 删除了 sdist 编译任务 (如果你只需要 wheel)
 
   package:
     if: startsWith(github.ref, 'refs/tags/')
     name: Package + Publish to PyPI
     runs-on: ubuntu-latest
-    needs: [build_macosx_arm64, build_win, build_linux, sdist]
+    # --- 修改处：needs 只保留 build_linux ---
+    needs: [build_linux] 
     permissions:
-      id-token: write  # required for OIDC trusted publisher
+      id-token: write
       contents: read
     steps:
       - name: Download all wheels
@@ -194,17 +96,6 @@ jobs:
           done
           echo "All wheels passed integrity check"
           ls -la dist/
-      - name: Download sdist
-        uses: actions/download-artifact@v4
-        with:
-          name: sdist
-          path: dist
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/*
+      # 如果上面删除了 sdist，记得把下面 download sdist 的步骤也去掉
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-      - name: Publish to PyPI
-        run: uv publish --trusted-publishing always

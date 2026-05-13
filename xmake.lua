@@ -15,30 +15,32 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, see <https://www.gnu.org/licenses/>.
 ]]
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
-
 set_license("LGPL-3.0-or-later")
-
 add_repositories("my-repo repo")
 
+-- 1. 模式匹配修复：使用 ** 确保对子依赖生效
 add_requires("libintl", {configs = {shared = false}})
 add_requires("litehtml", {configs = {utf8 = true}})
 add_requires("pango", {configs = {shared = false}})
 add_requires("libjpeg-turbo", "libwebp", "giflib", "aklomp-base64", "fmt")
--- 显式声明 zlib 静态链接，防止 manylinux wheel 中符号被链接器优化掉
 add_requires("zlib", {configs = {shared = false}})
 set_languages("c++17")
 add_requires("libavif", {configs = { aom = true }})
 add_requires("cairo", {configs = { xlib = false }})
+
+-- 修复 glob 模式
 add_requireconfs("**.cairo", { override = true, configs = { xlib = false } })
--- 锁定 fribidi 版本，避免 v1.0.16 的构建问题
-add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
-add_requires("python", { system = true, version = ">=3.10", configs = { headeronly = not is_plat("windows"), shared = true } })
+add_requireconfs("**.fribidi", { override = true, version = "1.0.15" })
 add_requireconfs("**.python", { override = true, configs = { headeronly = true, shared = true } })
 add_requireconfs("**|python|cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
 
-
 function require_htmlkit()
     if is_plat("linux") then
+        -- 2. 核心修复：使用逗号分隔的单条指令强制链接顺序
+        -- 这样做可以绕过 xmake 对 add_links 的重新排序
+        add_shflags("-Wl,--no-as-needed", {force = true})
+        add_shflags("-Wl,--whole-archive,-lz,-lpangoft2-1.0,--no-whole-archive", {force = true})
+
         if is_arch("x86_64") then
             add_linkorders("pangocairo-1.0", "pango-1.0")
             add_linkorders("pangoft2-1.0", "pango-1.0")
@@ -46,26 +48,21 @@ function require_htmlkit()
             add_linkorders("pangocairo-1.0", "pangoft2-1.0", "pango-1.0")
         end
     end
-    add_packages("litehtml", "cairo", "pango", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt")
-    -- 显式添加 zlib 包，防止链接器因 --as-needed / gc-sections 将其优化掉
-    add_packages("zlib")
+
+    -- 依然保留 add_packages，为了让 xmake 自动处理头文件路径和库搜索路径(-L)
+    add_packages("litehtml", "cairo", "pango", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt", "zlib")
     add_packages("python", { links = {} })
+    
     add_files("core/*.cpp")
     add_defines("UNICODE", "PY_SSIZE_T_CLEAN")
+
     if is_plat("windows") then
         add_links("Dwrite")
     end
     if is_plat("macosx") then
-        -- Pango CoreText backend needs CoreText (and CoreGraphics/CoreFoundation for related symbols)
         add_frameworks("CoreText", "CoreGraphics", "CoreFoundation")
         add_ldflags("-undefined", "dynamic_lookup", {force = true})
         add_shflags("-undefined", "dynamic_lookup", {force = true})
-    end
-    if is_plat("linux") then
-        -- 精确强制保留运行时需要的符号，防止链接器因 --as-needed / gc-sections 优化掉
-        -- add_packages("zlib", "pango") 已负责链接 -lz / -lpangoft2-1.0，此处仅保留 -u 强制符号
-        add_ldflags("-Wl,-u,deflateInit2_", {force = true})
-        add_ldflags("-Wl,-u,pango_fc_font_create_base_metrics_for_context", {force = true})
     end
 end
 
