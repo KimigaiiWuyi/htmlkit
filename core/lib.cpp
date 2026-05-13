@@ -28,6 +28,7 @@ License along with this library; if not, see <https://www.gnu.org/licenses/>.
 #include "debug_container.h"
 #include "font_wrapper.h"
 
+
 extern "C" {
 static PyObject* render(PyObject* mod, PyObject* args) {
     PyObject *exception_fn = nullptr, *asyncio_run_coroutine_threadsafe = nullptr,
@@ -274,3 +275,4 @@ static struct PyModuleDef core_module = {
 
 PyMODINIT_FUNC PyInit_core(void) { return PyModuleDef_Init(&core_module); }
 }
+

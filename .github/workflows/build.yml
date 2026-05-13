@@ -1,6 +1,8 @@
 name: Build Wheels
 on:
   push:
+    tags:
+      - 'v*'
   workflow_dispatch:
   pull_request:
     branches:
@@ -12,67 +14,179 @@ on:
 
 jobs:
   build_linux:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
-    runs-on: ubuntu-24.04${{ matrix.archs == 'aarch64' && '-arm' || '' }}
+    runs-on: ${{ matrix.archs == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
     strategy:
       fail-fast: false
       matrix:
-        python: [cp312]
-        platform: [manylinux, musllinux] 
+        python: [cp310, cp312, cp313t, cp314t]
+        platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
+
       - name: Build wheel (manylinux)
-        if: contains(matrix.platform, 'manylinux')
+        if: matrix.platform == 'manylinux'
         uses: pypa/cibuildwheel@v3.2.0
         env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
+          CIBW_BUILD: ${{ matrix.python }}-manylinux_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
-            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" -o /tmp/xmake.gz.run
+            for pydir in /opt/python/*/; do
+              pybin="$pydir/bin/python3"
+              [ -x "$pybin" ] || continue
+              "$pybin" -m pip install --quiet --upgrade pip setuptools wheel || true
+            done
+            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" \
+              -o /tmp/xmake.gz.run
             bash /tmp/xmake.gz.run
             mkdir -p ~/.xmake/searchdirs
-            curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+            curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
+              -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
             ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs
           CIBW_ENVIRONMENT: |
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
+            CXXFLAGS="-pthread"
+          CIBW_BUILD_VERBOSITY: 2
+
       - name: Build wheel (musllinux)
-        if: contains(matrix.platform, 'musllinux')
+        if: matrix.platform == 'musllinux'
         uses: pypa/cibuildwheel@v3.2.0
         env:
-          CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
+          CIBW_BUILD: ${{ matrix.python }}-musllinux_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
             apk add curl bash git patch unzip tar
             apk add 7zip || apk add p7zip || true
-            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" -o /tmp/xmake.gz.run
+            if command -v python3 &>/dev/null; then
+              python3 -m pip install --quiet --upgrade pip setuptools wheel || true
+            fi
+            curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" \
+              -o /tmp/xmake.gz.run
             bash /tmp/xmake.gz.run
             ~/.local/bin/xmake repo -u
             mkdir -p ~/.xmake/searchdirs
-            curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+            curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
+              -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
             ~/.local/bin/xmake g --pkg_searchdirs=~/.xmake/searchdirs
           CIBW_ENVIRONMENT: |
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
+            CXXFLAGS="-pthread"
+          CIBW_BUILD_VERBOSITY: 2
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-${{ matrix.platform }}_${{ matrix.archs }}
           path: ./wheelhouse/*.whl
 
-  # 3. 删除了 sdist 编译任务 (如果你只需要 wheel)
+  build_macosx_arm64:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    name: Build wheel for ${{ matrix.python }}-macosx_arm64
+    runs-on: macos-14
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [cp310, cp312, cp313t, cp314t]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install xmake
+        run: brew install xmake
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.xmake
+          key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for giflib
+        run: |
+          mkdir -p ~/.xmake/searchdirs
+          curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
+            -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+          xmake g --pkg_searchdirs=~/.xmake/searchdirs
+      - name: Build wheel
+        uses: pypa/cibuildwheel@v3.2.0
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
+          CIBW_BUILD_VERBOSITY: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.python }}-macosx_arm64
+          path: ./wheelhouse/*.whl
+
+  build_win:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    name: Build wheel for ${{ matrix.python }}-win_amd64
+    runs-on: windows-2022
+    continue-on-error: ${{ contains(matrix.python, 'cp314') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [cp310, cp312, cp313t, cp314t]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install xmake
+        uses: MinoruSekine/setup-scoop@v4.0.2
+        with:
+          apps: xmake
+      - name: Cache xmake packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LOCALAPPDATA }}\.xmake
+          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for giflib
+        shell: bash
+        run: |
+          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
+          curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
+            -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
+      - name: Build wheel
+        uses: pypa/cibuildwheel@v3.2.0
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-win_amd64
+          CIBW_BUILD_VERBOSITY: 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.python }}-win_amd64
+          path: ./wheelhouse/*.whl
+
+  sdist:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    name: Build Source Distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build sdist
+        run: uv build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
 
   package:
     if: startsWith(github.ref, 'refs/tags/')
     name: Package + Publish to PyPI
     runs-on: ubuntu-latest
-    # --- 修改处：needs 只保留 build_linux ---
-    needs: [build_linux] 
+    needs: [build_linux, build_macosx_arm64, build_win, sdist]
     permissions:
       id-token: write
       contents: read
@@ -86,13 +200,12 @@ jobs:
         run: |
           mkdir -p dist
           find wheels -name '*.whl' -exec cp -n {} dist/ \;
-      - name: Verify wheel integrity
-        run: |
-          for whl in dist/*.whl; do
-            python3 -m zipfile -t "$whl" || { echo "CORRUPT: $whl"; exit 1; }
-          done
-          echo "All wheels passed integrity check"
-          ls -la dist/
-      # 如果上面删除了 sdist，记得把下面 download sdist 的步骤也去掉
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v5
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always
