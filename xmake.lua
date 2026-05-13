@@ -30,6 +30,8 @@ set_languages("c++17")
 add_requires("libavif", {configs = { aom = true }})
 add_requires("cairo", {configs = { xlib = false }})
 add_requireconfs("**.cairo", { override = true, configs = { xlib = false } })
+-- 锁定 fribidi 版本，避免 v1.0.16 的构建问题
+add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
 add_requires("python", { system = true, version = ">=3.10", configs = { headeronly = not is_plat("windows"), shared = true } })
 add_requireconfs("**.python", { override = true, configs = { headeronly = true, shared = true } })
 add_requireconfs("**|python|cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
