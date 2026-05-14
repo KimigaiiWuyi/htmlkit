@@ -26,10 +26,10 @@ add_requireconfs("**", { configs = { shared = false, pic = true } })
 -- 
 add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
 add_requireconfs("python", "**.python", { system = true, override = true })
-add_requireconfs("cmake|ninja|meson", { system = false, configs = { shared = false } })
+add_requireconfs("cmake|ninja|meson", { system = true, override = true })
 
 -- 其他包规则保持不变
-add_requireconfs("fribidi",   { override = true, version = "v1.0.15" })
+add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
 
 add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
@@ -79,11 +79,10 @@ target("core")
             end
 
             if is_plat("windows") then
-                -- Windows 需要手动寻找并添加 python 库目录
                 local libpath = path.join(path.directory(libdir), "libs")
                 target:add("linkdirs", libpath)
-                -- 自动根据当前运行环境链接对应的 python3.lib 或 python310.lib 等
-                 local py_lib = os.iorunv(python.program, {"-c", "import sys; import os; v = sys.version_info; t = 't' if 't' in os.path.basename(sys.executable) else ''; print(f'python{v[0]}{v[1]}{t}')"}):trim()
+                -- 动态获取库名：python310, python313, python313t 等
+                local py_lib = os.iorunv(python.program, [[-c "import sys; import os; v=sys.version_info; t='t' if 't' in os.path.basename(sys.executable) else ''; print(f'python{v[0]}{v[1]}{t}')"]]):trim()
                 target:add("links", py_lib)
             end
         end
