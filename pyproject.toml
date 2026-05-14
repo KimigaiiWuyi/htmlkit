@@ -137,3 +137,6 @@ XMAKE_CONFIG_MODE = "release"
 XMAKE_GLOBALDIR  = "/host/tmp"
 XMAKE_ROOT = "y"
 UV_CACHE_DIR="/host/tmp/setup-uv-cache"
+
+[tool.setuptools.package-data]
+htmlkit = ["templates/*"]
