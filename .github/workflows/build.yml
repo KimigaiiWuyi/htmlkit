@@ -102,29 +102,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          
-      # 安装 uv 到 macOS 环境
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        
+
       - name: Install xmake
         run: brew install xmake
+
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
           path: ~/.xmake
           key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
+
       - name: Workaround for giflib
         run: |
           mkdir -p ~/.xmake/searchdirs
           curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
             -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
           xmake g --pkg_searchdirs=~/.xmake/searchdirs
+
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
           CIBW_BUILD_VERBOSITY: 2
+          CIBW_ENVIRONMENT: >
+            XMAKE_ROOT=y
+            CXXFLAGS="-pthread -std=c++17"
+            CFLAGS="-pthread"
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-macosx_arm64
@@ -144,32 +151,43 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-          
-      # 安装 uv 到 Windows 环境
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-        
+
       - name: Install xmake
         uses: MinoruSekine/setup-scoop@v4.0.2
         with:
           apps: xmake
+
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
-          path: ${{ env.LOCALAPPDATA }}\.xmake
+          path: ~/.xmake
           key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
+
       - name: Workaround for giflib
         shell: bash
         run: |
-          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
+          mkdir -p ~/.xmake/searchdirs
           curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
-            -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
-          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
+            -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
+          xmake g --pkg_searchdirs=~/.xmake/searchdirs
+
+      - name: Fix python dependency
+        shell: bash
+        run: |
+          sed -i 's/add_requires("python".*)/add_requires("python", {system = true})/' xmake.lua
+
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
           CIBW_BUILD_VERBOSITY: 2
+          CIBW_ENVIRONMENT: "XMAKE_ROOT=y"
+          CIBW_BEFORE_BUILD: >
+            xmake f -y -m release --python="$PYTHON"
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-win_amd64
