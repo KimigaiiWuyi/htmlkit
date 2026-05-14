@@ -20,11 +20,13 @@ add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_license("LGPL-3.0-or-later")
 add_repositories("my-repo repo")
 
+add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
+
+-- 专为 Alpine/musllinux 准备的动态库注入（必须放在上述 ** 配置之后）
 if is_plat("linux") then
-    -- 判断是否为 musl / Alpine
     if os.isfile("/etc/alpine-release") then
-        -- musllinux 强制使用系统级静态库，规避源码编译 glib 时的 libintl 丢失问题
-        add_requireconfs("glib", "pcre2", "harfbuzz", "pango", "cairo", "fribidi", { system = true })
+        -- 强制使用系统自带的动态库，避开源码静态编译 glib/pango 的巨坑，生成 wheel 时 cibuildwheel 会自动把依赖的 .so 封包进去
+        add_requireconfs("glib", "pcre2", "harfbuzz", "pango", "cairo", "fribidi", { system = true, override = true, configs = { shared = true } })
     else
         -- 常规 manylinux (glibc) 保持原配置
         add_requireconfs("glib", { configs = { libintl = true } })
@@ -34,7 +36,6 @@ end
 add_requireconfs("python", "**.python", { system = true, override = true })
 -- 删除强制使用系统构建工具，让 Xmake 自行管理 meson/ninja，避免 PEP-517 隔离环境找不到工具
 -- add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
-add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
