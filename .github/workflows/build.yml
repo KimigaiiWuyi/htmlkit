@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
 
@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v4
@@ -144,40 +144,39 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
+        python: [cp310, cp312, cp313t, cp314t]
 
     steps:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
+
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v5
+
+      # 1. 弃用 scoop，改用官方 Action，它会把真实的 xmake.exe 加入 PATH，不走 shim
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
         with:
-          cache-suffix: ${{ matrix.python }}-win_amd64
-          cache-dependency-glob: uv.lock
-      - name: Install Xmake
-        uses: MinoruSekine/setup-scoop@v4.0.2
-        with:
-          apps: xmake
-      - name: Cache Xmake
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.LOCALAPPDATA }}\.xmake
-          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
-      - name: Workaround for SourceForge 404 (giflib)
+          xmake-version: 2.9.9
+
+      - name: Workaround for giflib
         shell: bash
         run: |
-          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
-          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
-          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
+          # 统一使用环境变量，避免路径拼接错误
+          mkdir -p "$LOCALAPPDATA/.xmake/searchdirs"
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$LOCALAPPDATA/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          xmake g --pkg_searchdirs="$LOCALAPPDATA/.xmake/searchdirs" -y
+
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.python }}-win_amd64
-          path: ./wheelhouse/*.whl
+          CIBW_ENVIRONMENT: >
+            XMAKE_ROOT=y
+            CXXFLAGS="/std:c++17 /utf-8"
+            CFLAGS="/utf-8"
+          CIBW_BUILD_VERBOSITY: 2
 
   sdist:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
