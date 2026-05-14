@@ -21,10 +21,10 @@ set_license("LGPL-3.0-or-later")
 add_repositories("my-repo repo")
 
 
-add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
-
 add_requireconfs("python", "**.python", { system = true, override = true })
 add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
+add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
+add_requireconfs("glib", { configs = { libintl = true } })
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
@@ -37,7 +37,7 @@ add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs
 
 add_requires("libffi",     { configs = { shared = false } })
 add_requires("libintl",    { configs = { shared = false } })
-add_requires("glib",       { configs = { shared = false } })
+-- add_requires("glib",       { configs = { shared = false } })
 add_requires("harfbuzz",   { configs = { shared = false } })
 add_requires("fribidi",    { configs = { shared = false } })
 add_requires("litehtml",   { configs = { utf8 = true } })
@@ -91,8 +91,9 @@ target("core")
     add_files("core/*.cpp")
     add_defines("UNICODE")
 
-    add_packages("pango", "cairo", "zlib", "glib", "harfbuzz", "fribidi")
+    add_packages("pango", "cairo", "glib", "harfbuzz", "fribidi")
     add_packages("litehtml", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt")
+    add_packages("libintl", "libiconv", "libffi", "zlib")
 
     if is_plat("windows") then
         add_links("Dwrite", "User32", "Gdi32")
