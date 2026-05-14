@@ -90,7 +90,8 @@ jobs:
             # 在 musl 下，有时候需要显式指定搜索路径
             CPATH="/usr/include"
             LIBRARY_PATH="/usr/lib"
-            LDFLAGS="-lpthread"
+            # 显式告知链接器链接 libintl，解决 glib 在 musl 下的 undefined reference
+            LDFLAGS="-lpthread -lintl"
             CFLAGS="-pthread"
             CXXFLAGS="-pthread -std=c++17"
           CIBW_BUILD_VERBOSITY: 2
@@ -185,11 +186,12 @@ jobs:
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
-          CIBW_BUILD_FRONTEND: "pip" 
+          CIBW_BUILD_FRONTEND: "pip"
           
           CIBW_ENVIRONMENT: >
             XMAKE_ROOT=y
             CXXFLAGS="/std:c++17"
+            LDFLAGS="/std:c++17"
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4

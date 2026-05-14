@@ -81,7 +81,20 @@ target("core")
                 local libpath = path.join(path.directory(libdir), "libs")
                 target:add("linkdirs", libpath)
                 -- 动态获取库名：python310, python313, python313t 等
-                local py_lib = os.iorunv(python.program, { "-c", [[import sys; import os; v=sys.version_info; t='t' if 't' in os.path.basename(sys.executable) else ''; print(f'python{v[0]}{v[1]}{t}')]] }):trim()
+                -- 使用 sysconfig 精确获取库文件名，避免 't' in 'python.exe' 的误判
+                local py_lib = os.iorunv(python.program, { "-c", [[
+import sys
+import sysconfig
+import os
+# 获取具体的库文件名，例如 python310.lib 或 python313t.lib
+libname = sysconfig.get_config_var('LIBRARY')
+if not libname:
+    # 备选方案：通过版本和 free-threading 状态判断
+    v = sys.version_info
+    t = 't' if hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled() else ''
+    libname = f"python{v[0]}{v[1]}{t}"
+print(os.path.splitext(libname)[0])
+                ]] }):trim()
                 target:add("links", py_lib)
             end
         end
