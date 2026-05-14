@@ -14,41 +14,27 @@ Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, see <https://www.gnu.org/licenses/>.
 ]]
+set_languages("c11", "cxx17")
+
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
-
 set_license("LGPL-3.0-or-later")
-
 add_repositories("my-repo repo")
 
 -- 全局开启 PIC
 add_requireconfs("**", { configs = { shared = false, pic = true } })
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 关键：阻止任何上游包（glib/meson/gettext 等）将 python 作为子依赖拉下来。
--- xmake 的 glib 包在 Linux 上会通过 meson 构建，meson 会声明 python 为
--- build-tool 依赖，从而触发 "install python 3.13.x" 的错误流程。
--- 将 python 标记为 system=true 让 xmake 直接使用宿主 python3，不再自行编译。
--- ─────────────────────────────────────────────────────────────────────────────
-add_requireconfs("**.python", { override = true, system = true })
-add_requireconfs("python",    { override = true, system = true })
+-- 
+add_requireconfs("python", "**.python", { system = true, override = true })
 
--- 锁定 fribidi 版本，避免 v1.0.16 的构建问题
+-- 其他包规则保持不变
 add_requireconfs("fribidi",   { override = true, version = "v1.0.15" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
-
--- 全局：非系统包优先从 xmake 仓库下载静态库版本
 add_requireconfs("**", { override = true, system = false, configs = { shared = false } })
-
--- python 例外：必须 system=true（上面已覆盖，这里再显式保证不被全局规则覆盖）
-add_requireconfs("**.python", { override = true, system = true })
-add_requireconfs("python",    { override = true, system = true })
-
--- 构建工具从 xmake 仓库获取
 add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
 
--- ─────────────────────────────────────────────────────────────────────────────
+
 -- 包依赖定义
--- ─────────────────────────────────────────────────────────────────────────────
+
 add_requires("libffi",     { configs = { shared = false } })
 add_requires("libintl",    { configs = { shared = false } })
 add_requires("glib",       { configs = { shared = false } })
@@ -75,10 +61,31 @@ target("core")
 
     -- 手动注入 Python 头文件（由 cibuildwheel venv 提供的 python3）
     on_load(function(target)
-        local incdir = os.iorun("python3 -c \"import sysconfig; print(sysconfig.get_path('include'))\""):trim()
-        if incdir and incdir ~= "" then
-            target:add("includedirs", incdir)
+        import("lib.detect.find_tool")
+        
+        -- 尝试寻找 python，cibuildwheel 环境下通常直接用 'python' 或 'python3'
+        local python = find_tool("python") or find_tool("python3")
+        
+        if python then
+            -- 获取头文件路径
+            local incdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('include'))"}):trim()
+            -- 获取库文件路径 (Windows 编译必须链接 python3x.lib)
+            local libdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('stdlib'))"}):trim()
+            
+            if incdir and incdir ~= "" then
+                target:add("includedirs", incdir)
+            end
+
+            if is_plat("windows") then
+                -- Windows 需要手动寻找并添加 python 库目录
+                local libpath = path.join(path.directory(libdir), "libs")
+                target:add("linkdirs", libpath)
+                -- 自动根据当前运行环境链接对应的 python3.lib 或 python310.lib 等
+                local py_lib = os.iorunv(python.program, {"-c", "import platform; import sys; print('python' + sys.version_info[0] + sys.version_info[1])"}):trim()
+                target:add("links", py_lib)
+            end
         end
+        
         target:add("defines", "PY_SSIZE_T_CLEAN")
     end)
 
@@ -89,7 +96,7 @@ target("core")
     add_packages("litehtml", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt")
 
     if is_plat("windows") then
-        add_links("Dwrite")
+        add_links("Dwrite", "User32", "Gdi32")
     end
     if is_plat("macosx") then
         add_frameworks("CoreText", "CoreGraphics", "CoreFoundation")

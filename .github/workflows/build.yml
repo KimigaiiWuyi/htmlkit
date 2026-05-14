@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
         platform: [manylinux, musllinux]
         archs: [x86_64, aarch64]
 
@@ -96,7 +96,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
 
     steps:
       - uses: actions/checkout@v4
@@ -144,42 +144,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: [cp310, cp312, cp313t, cp314t]
+        python: [cp310, cp312, cp313, cp313t, cp314, cp314t]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
-          
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        
-      - name: Install xmake
+        uses: astral-sh/setup-uv@v7
+        with:
+          cache-suffix: ${{ matrix.python }}-win_amd64
+          cache-dependency-glob: uv.lock
+      - name: Install Xmake
         uses: MinoruSekine/setup-scoop@v4.0.2
         with:
           apps: xmake
-          
-      - name: Cache xmake packages
+      - name: Cache Xmake
         uses: actions/cache@v4
         with:
           path: ${{ env.LOCALAPPDATA }}\.xmake
-          # 修改点：将 python 版本加入 cache key 避免相互污染
-          key: xmake-win_amd64-${{ matrix.python }}-${{ hashFiles('xmake.lua') }}
-          
-      - name: Workaround for giflib
+          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
+      - name: Workaround for SourceForge 404 (giflib)
         shell: bash
         run: |
           mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
-          curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
-            -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
           xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
-          
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
-          CIBW_BUILD_VERBOSITY: 2
-          
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-win_amd64
