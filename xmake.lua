@@ -20,13 +20,11 @@ add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_license("LGPL-3.0-or-later")
 add_repositories("my-repo repo")
 
--- 全局开启 PIC
-add_requireconfs("**", { configs = { shared = false, pic = true } })
 
--- 
 add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
+
 add_requireconfs("python", "**.python", { system = true, override = true })
-add_requireconfs("cmake|ninja|meson", { system = true, override = true })
+add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })

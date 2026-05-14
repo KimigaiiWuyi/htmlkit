@@ -151,22 +151,30 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Setup xmake
         uses: xmake-io/github-action-setup-xmake@v1
         with:
           xmake-version: 2.9.9
 
+      - name: Pre-download giflib
+        shell: bash
+        run: |
+          mkdir -p "$LOCALAPPDATA/.xmake/searchdirs"
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$LOCALAPPDATA/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          # 在全局层面配置一次，确保所有子进程继承
+          xmake g --pkg_searchdirs="$LOCALAPPDATA/.xmake/searchdirs" -y
+
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
-          # 核心改动：在构建前，强制把当前 python 路径注入环境变量，并告诉 xmake 不准下载 python
-          CIBW_BEFORE_BUILD_WIN: |
-            pip install uv
-            mkdir -p "%LOCALAPPDATA%/.xmake/searchdirs"
-            curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "%LOCALAPPDATA%/.xmake/searchdirs/giflib-5.2.2.tar.gz"
-            xmake g --pkg_searchdirs="%LOCALAPPDATA%/.xmake/searchdirs" -y
-            
+          CIBW_BUILD_FRONTEND: "pip" 
+          
           CIBW_ENVIRONMENT: >
             XMAKE_ROOT=y
             CFLAGS="/utf-8"
