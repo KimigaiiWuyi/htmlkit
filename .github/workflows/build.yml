@@ -187,6 +187,8 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
           CIBW_BUILD_FRONTEND: "pip"
+          # 为当前 Python 虚拟环境安装构建工具，解决 Python 3.12+ 删除 distutils 导致 meson 崩溃的问题
+          CIBW_BEFORE_BUILD: "pip install setuptools meson ninja"
           
           CIBW_ENVIRONMENT: >
             XMAKE_ROOT=y

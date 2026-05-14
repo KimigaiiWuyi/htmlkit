@@ -32,7 +32,8 @@ add_requireconfs("**", { system = false, configs = { shared = false, pic = true 
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
 
-add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
+-- 删除冲突配置：让 Xmake 使用系统或 pip 安装的 meson/ninja，避免 Python 3.12+ 缺少 distutils 导致 meson 崩溃
+-- add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
 
 -- 包依赖定义
 add_requires("libintl", { configs = { shared = false } })
