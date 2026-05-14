@@ -34,8 +34,8 @@ if is_plat("linux") then
 end
 
 add_requireconfs("python", "**.python", { system = true, override = true })
--- 让 Xmake 自行下载管理 meson/ninja，使用虚拟环境 Python 直接调用脚本，避开 .exe 包装器与环境变量脱节问题
--- add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
+-- 强制要求 Xmake 使用系统中 (choco 注入到 PATH 里的) 原生可执行文件，避开下载纯 Python 脚本导致 Windows 进程创建失败的坑
+add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })

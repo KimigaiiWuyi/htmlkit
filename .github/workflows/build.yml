@@ -177,6 +177,15 @@ jobs:
         with:
           xmake-version: 2.9.9
 
+      # 安装原生构建工具，并强制将其路径注入到 Github Actions 全局环境
+      - name: Install Native Build Tools
+        shell: pwsh
+        run: |
+          choco install meson ninja pkgconfiglite --no-progress
+          # 将 Choco 安装的真实 .exe 路径注入到全局环境，供 cibuildwheel 和 xmake 继承
+          echo "C:\Program Files\Meson" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Pre-download giflib
         shell: bash
         run: |
