@@ -20,23 +20,19 @@ add_rules("mode.debug", "mode.release", "mode.releasedbg")
 set_license("LGPL-3.0-or-later")
 add_repositories("my-repo repo")
 
+if is_plat("linux") then
+    add_requireconfs("glib", { configs = { libintl = true } })
+end
 
 add_requireconfs("python", "**.python", { system = true, override = true })
 add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
-
-if is_plat("linux") then
-    add_requireconfs("glib", { configs = { libintl = false } })
-else
-    add_requireconfs("glib", { configs = { libintl = true } })
-end
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
 
 add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
-
 
 -- 包依赖定义
 add_requires("libintl", { configs = { shared = false } })
@@ -85,7 +81,7 @@ target("core")
                 local libpath = path.join(path.directory(libdir), "libs")
                 target:add("linkdirs", libpath)
                 -- 动态获取库名：python310, python313, python313t 等
-                local py_lib = os.iorunv(python.program, [[-c "import sys; import os; v=sys.version_info; t='t' if 't' in os.path.basename(sys.executable) else ''; print(f'python{v[0]}{v[1]}{t}')"]]):trim()
+                local py_lib = os.iorunv(python.program, { "-c", [[import sys; import os; v=sys.version_info; t='t' if 't' in os.path.basename(sys.executable) else ''; print(f'python{v[0]}{v[1]}{t}')]] }):trim()
                 target:add("links", py_lib)
             end
         end
