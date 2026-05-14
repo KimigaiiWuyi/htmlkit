@@ -177,14 +177,11 @@ jobs:
         with:
           xmake-version: 2.9.9
 
-      # 安装原生构建工具，并强制将其路径注入到 Github Actions 全局环境
-      - name: Install Native Build Tools
-        shell: pwsh
+      # 用全局 pip 安装 meson 和 ninja，用 choco 补充 pkg-config
+      - name: Install Global Build Tools
         run: |
-          choco install meson ninja pkgconfiglite --no-progress
-          # 将 Choco 安装的真实 .exe 路径注入到全局环境，供 cibuildwheel 和 xmake 继承
-          echo "C:\Program Files\Meson" | Out-File -FilePath $env:GITHUB_PATH -Append
-          echo "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          python -m pip install meson ninja
+          choco install pkgconfiglite --no-progress
 
       - name: Pre-download giflib
         shell: bash
@@ -202,12 +199,10 @@ jobs:
           # 仅安装 setuptools 给 Xmake 的内置 meson 提供缺失的环境，绝不安装 meson/ninja
           CIBW_BEFORE_BUILD: "pip install setuptools"
           
-          # 引入 XMAKE_GLOBALDIR=C:/xmake 极大缩短文件路径，解决 MAX_PATH 超限导致的 -1 崩溃
+          # 仅保留防路径崩溃的 GLOBALDIR，删除 CXXFLAGS/LDFLAGS 避免毒死链接器
           CIBW_ENVIRONMENT: >
             XMAKE_GLOBALDIR=C:/xmake
             XMAKE_ROOT=y
-            CXXFLAGS="/std:c++17"
-            LDFLAGS="/std:c++17"
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4
