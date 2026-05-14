@@ -53,7 +53,7 @@ jobs:
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
-            CXXFLAGS="-pthread"
+            CXXFLAGS="-pthread -std=c++17" 
           CIBW_BUILD_VERBOSITY: 2
 
       - name: Build wheel (musllinux)
@@ -80,7 +80,7 @@ jobs:
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
-            CXXFLAGS="-pthread"
+            CXXFLAGS="-pthread -std=c++17"
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4
@@ -102,36 +102,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
+          
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
+        
       - name: Install xmake
         run: brew install xmake
-
+      
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
           path: ~/.xmake
-          key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
-
+          # 修改点：将 python 版本加入 cache key 避免相互污染
+          key: xmake-macosx_arm64-${{ matrix.python }}-${{ hashFiles('xmake.lua') }}
+          
       - name: Workaround for giflib
         run: |
           mkdir -p ~/.xmake/searchdirs
           curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
             -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
           xmake g --pkg_searchdirs=~/.xmake/searchdirs
-
+          
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
           CIBW_BUILD_VERBOSITY: 2
-          CIBW_ENVIRONMENT: >
-            XMAKE_ROOT=y
-            CXXFLAGS="-pthread -std=c++17"
-            CFLAGS="-pthread"
-
+          # 修改点：强制注入 C++17 编译标准，解决 shared_mutex 报错
+          CIBW_ENVIRONMENT: 'CXXFLAGS="-std=c++17"'
+          
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-macosx_arm64
@@ -151,43 +150,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
+          
       - name: Install uv
         uses: astral-sh/setup-uv@v5
-
+        
       - name: Install xmake
         uses: MinoruSekine/setup-scoop@v4.0.2
         with:
           apps: xmake
-
+          
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
-          path: ~/.xmake
-          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
-
+          path: ${{ env.LOCALAPPDATA }}\.xmake
+          # 修改点：将 python 版本加入 cache key 避免相互污染
+          key: xmake-win_amd64-${{ matrix.python }}-${{ hashFiles('xmake.lua') }}
+          
       - name: Workaround for giflib
         shell: bash
         run: |
-          mkdir -p ~/.xmake/searchdirs
+          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
           curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
-            -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
-          xmake g --pkg_searchdirs=~/.xmake/searchdirs
-
-      - name: Fix python dependency
-        shell: bash
-        run: |
-          sed -i 's/add_requires("python".*)/add_requires("python", {system = true})/' xmake.lua
-
+            -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
+          
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
           CIBW_BUILD_VERBOSITY: 2
-          CIBW_ENVIRONMENT: "XMAKE_ROOT=y"
-          CIBW_BEFORE_BUILD: >
-            xmake f -y -m release --python="$PYTHON"
-
+          
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-win_amd64
@@ -232,8 +224,4 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: sdist
-          path: dist
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-      - name: Publish to PyPI
-        run: uv publish --trusted-publishing always
+          path: dist/
