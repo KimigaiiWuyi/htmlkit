@@ -62,15 +62,24 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-musllinux_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
-            apk add curl bash git patch unzip tar
+            # 安装编译必需的系统库
+            apk add curl bash git patch unzip tar build-base
+            apk add gettext-dev libiconv-dev ffi-dev zlib-dev
             apk add 7zip || apk add p7zip || true
+            
             if command -v python3 &>/dev/null; then
               python3 -m pip install --quiet --upgrade pip setuptools wheel || true
             fi
+            
+            # 安装 xmake
             curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" \
               -o /tmp/xmake.gz.run
             bash /tmp/xmake.gz.run
+            
+            # 更新 repo 强制刷新索引
             ~/.local/bin/xmake repo -u
+            
+            # 预下载 giflib
             mkdir -p ~/.xmake/searchdirs
             curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
               -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
@@ -78,6 +87,9 @@ jobs:
           CIBW_ENVIRONMENT: |
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
+            # 在 musl 下，有时候需要显式指定搜索路径
+            CPATH="/usr/include"
+            LIBRARY_PATH="/usr/lib"
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
             CXXFLAGS="-pthread -std=c++17"
@@ -177,8 +189,7 @@ jobs:
           
           CIBW_ENVIRONMENT: >
             XMAKE_ROOT=y
-            CFLAGS="/utf-8"
-            CXXFLAGS="/std:c++17 /utf-8"
+            CXXFLAGS="/std:c++17"
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4

@@ -24,7 +24,12 @@ add_repositories("my-repo repo")
 add_requireconfs("python", "**.python", { system = true, override = true })
 add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
-add_requireconfs("glib", { configs = { libintl = true } })
+
+if is_plat("linux") then
+    add_requireconfs("glib", { configs = { libintl = false } })
+else
+    add_requireconfs("glib", { configs = { libintl = true } })
+end
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
@@ -34,9 +39,9 @@ add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs
 
 
 -- 包依赖定义
-
+add_requires("libintl", { configs = { shared = false } })
+add_requires("libiconv", { configs = { shared = false } })
 add_requires("libffi",     { configs = { shared = false } })
-add_requires("libintl",    { configs = { shared = false } })
 -- add_requires("glib",       { configs = { shared = false } })
 add_requires("harfbuzz",   { configs = { shared = false } })
 add_requires("fribidi",    { configs = { shared = false } })
