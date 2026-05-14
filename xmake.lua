@@ -34,8 +34,8 @@ if is_plat("linux") then
 end
 
 add_requireconfs("python", "**.python", { system = true, override = true })
--- 删除强制使用系统构建工具，让 Xmake 自行管理 meson/ninja，避免 PEP-517 隔离环境找不到工具
--- add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
+-- 强制 Xmake 使用系统提供的原生独立可执行文件（choco 安装），避开 cibuildwheel 隔离环境中 Python 版 meson 的崩溃
+add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 
 -- 其他包规则保持不变
 add_requireconfs("fribidi", { override = true, version = "v1.0.15" })

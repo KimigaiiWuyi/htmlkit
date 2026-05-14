@@ -177,6 +177,10 @@ jobs:
         with:
           xmake-version: 2.9.9
 
+      # 利用 choco 全局安装独立原生版的构建工具
+      - name: Install Native Build Tools
+        run: choco install meson ninja pkgconfiglite cmake --no-progress
+
       - name: Pre-download giflib
         shell: bash
         run: |
