@@ -74,13 +74,10 @@ target("core")
     on_load(function(target)
         import("lib.detect.find_tool")
         
-        -- 尝试寻找 python，cibuildwheel 环境下通常直接用 'python' 或 'python3'
         local python = find_tool("python") or find_tool("python3")
         
         if python then
-            -- 获取头文件路径
             local incdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('include'))"}):trim()
-            -- 获取库文件路径 (Windows 编译必须链接 python3x.lib)
             local libdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('stdlib'))"}):trim()
             
             if incdir and incdir ~= "" then
@@ -88,35 +85,37 @@ target("core")
             end
 
             if is_plat("windows") then
+                -- 1. 禁用 Python 头文件的自动链接 (Autolinking)
+                -- 只关闭 #pragma comment(lib, ...) 指令，不影响 __declspec(dllimport) 符号导入
+                target:add("defines", "Py_NO_LINK")
+
                 local libpath = path.join(path.directory(libdir), "libs")
                 target:add("linkdirs", libpath)
-                -- 动态获取库名并判断是否为 free-threaded 版本
+
+                -- 2. 获取库名并检测 free-threaded
                 local py_info = os.iorunv(python.program, { "-c", [[
 import sys
 import sysconfig
 import os
+is_t = hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
+v = sys.version_info
 libname = sysconfig.get_config_var('LIBRARY')
 if not libname:
-    v = sys.version_info
-    t = 't' if hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled() else ''
+    t = 't' if is_t else ''
     libname = f"python{v[0]}{v[1]}{t}"
-is_t = "1" if "t" in libname else "0"
-print(f"{os.path.splitext(libname)[0]}|{is_t}")
+print(f"{os.path.splitext(libname)[0]}|{1 if is_t else 0}")
                 ]] }):trim():split("|")
 
-                local py_lib = py_info[1]
+                local libname = py_info[1]
                 local is_free_threaded = py_info[2] == "1"
 
-                target:add("links", py_lib)
+                -- 3. 手动链接正确的库名 (如 python314t)
+                target:add("links", libname)
 
-                -- 如果是 free-threaded 版本，必须定义 Py_GIL_DISABLED=1，
-                -- 否则 Python 头文件会自作聪明地去自动链接不带 t 的库（如 python314.lib）
+                -- 4. 如果是 free-threaded，必须定义这个宏，否则头文件内部逻辑会乱
                 if is_free_threaded then
                     target:add("defines", "Py_GIL_DISABLED=1")
                 end
-
-                -- 禁用 Python 头文件的自动链接（autolinking），因为 Xmake 已手动处理
-                target:add("defines", "Py_NO_ENABLE_SHARED")
             end
         end
         
