@@ -67,6 +67,11 @@ jobs:
             apk add gettext-dev libiconv-dev ffi-dev zlib-dev
             apk add 7zip || apk add p7zip || true
             
+            # 安装底层依赖的 pkgconfig 以及静态库，避免从源码编译 glib 等 GNOME 库
+            apk add pkgconf glib-dev glib-static pcre2-dev \
+                    harfbuzz-dev harfbuzz-static pango-dev pango-static \
+                    cairo-dev cairo-static fribidi-dev fribidi-static
+            
             if command -v python3 &>/dev/null; then
               python3 -m pip install --quiet --upgrade pip setuptools wheel || true
             fi
@@ -88,12 +93,12 @@ jobs:
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
             # 在 musl 下，有时候需要显式指定搜索路径
-            CPATH="/usr/include"
-            LIBRARY_PATH="/usr/lib"
+            CPATH=/usr/include
+            LIBRARY_PATH=/usr/lib
             # 显式告知链接器链接 libintl，解决 glib 在 musl 下的 undefined reference
-            LDFLAGS="-lpthread -lintl"
-            CFLAGS="-pthread"
-            CXXFLAGS="-pthread -std=c++17"
+            LDFLAGS=-lpthread -lintl
+            CFLAGS=-pthread
+            CXXFLAGS=-pthread -std=c++17
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4
@@ -187,13 +192,13 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
           CIBW_BUILD_FRONTEND: "pip"
-          # 为当前 Python 虚拟环境安装构建工具，解决 Python 3.12+ 删除 distutils 导致 meson 崩溃的问题
-          CIBW_BEFORE_BUILD: "pip install setuptools meson ninja"
+          # 不再手动预装构建工具，Xmake 会自行管理 meson/ninja，避免 PEP-517 隔离环境找不到工具
+          # CIBW_BEFORE_BUILD: "pip install setuptools meson ninja"
           
           CIBW_ENVIRONMENT: >
             XMAKE_ROOT=y
-            CXXFLAGS="/std:c++17"
-            LDFLAGS="/std:c++17"
+            CXXFLAGS=/std:c++17
+            LDFLAGS=/std:c++17
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4
