@@ -90,22 +90,33 @@ target("core")
             if is_plat("windows") then
                 local libpath = path.join(path.directory(libdir), "libs")
                 target:add("linkdirs", libpath)
-                -- 动态获取库名：python310, python313, python313t 等
-                -- 使用 sysconfig 精确获取库文件名，避免 't' in 'python.exe' 的误判
-                local py_lib = os.iorunv(python.program, { "-c", [[
+                -- 动态获取库名并判断是否为 free-threaded 版本
+                local py_info = os.iorunv(python.program, { "-c", [[
 import sys
 import sysconfig
 import os
-# 获取具体的库文件名，例如 python310.lib 或 python313t.lib
 libname = sysconfig.get_config_var('LIBRARY')
 if not libname:
-    # 备选方案：通过版本和 free-threading 状态判断
     v = sys.version_info
     t = 't' if hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled() else ''
     libname = f"python{v[0]}{v[1]}{t}"
-print(os.path.splitext(libname)[0])
-                ]] }):trim()
+is_t = "1" if "t" in libname else "0"
+print(f"{os.path.splitext(libname)[0]}|{is_t}")
+                ]] }):trim():split("|")
+
+                local py_lib = py_info[1]
+                local is_free_threaded = py_info[2] == "1"
+
                 target:add("links", py_lib)
+
+                -- 如果是 free-threaded 版本，必须定义 Py_GIL_DISABLED=1，
+                -- 否则 Python 头文件会自作聪明地去自动链接不带 t 的库（如 python314.lib）
+                if is_free_threaded then
+                    target:add("defines", "Py_GIL_DISABLED=1")
+                end
+
+                -- 禁用 Python 头文件的自动链接（autolinking），因为 Xmake 已手动处理
+                target:add("defines", "Py_NO_ENABLE_SHARED")
             end
         end
         
