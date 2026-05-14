@@ -53,7 +53,7 @@ jobs:
             PATH=$PATH:$HOME/.local/bin
             LDFLAGS="-lpthread"
             CFLAGS="-pthread"
-            CXXFLAGS="-pthread"
+            CXXFLAGS="-pthread -std=c++17" 
           CIBW_BUILD_VERBOSITY: 2
 
       - name: Build wheel (musllinux)
@@ -62,15 +62,27 @@ jobs:
         env:
           CIBW_BUILD: ${{ matrix.python }}-musllinux_${{ matrix.archs }}
           CIBW_BEFORE_ALL: |
-            apk add curl bash git patch unzip tar
+            # 安装编译必需的系统库
+            apk add curl bash git patch unzip tar build-base
+            apk add gettext-dev libiconv-dev ffi-dev zlib-dev
             apk add 7zip || apk add p7zip || true
+            
+            # 安装 pkgconf 及 GNOME 全家桶的动态库版本（不要加 -static）
+            apk add pkgconf glib-dev pcre2-dev harfbuzz-dev pango-dev cairo-dev fribidi-dev
+            
             if command -v python3 &>/dev/null; then
               python3 -m pip install --quiet --upgrade pip setuptools wheel || true
             fi
+            
+            # 安装 xmake
             curl -fsSL "https://github.com/xmake-io/xmake/releases/download/v2.9.9/xmake-v2.9.9.gz.run" \
               -o /tmp/xmake.gz.run
             bash /tmp/xmake.gz.run
+            
+            # 更新 repo 强制刷新索引
             ~/.local/bin/xmake repo -u
+            
+            # 预下载 giflib
             mkdir -p ~/.xmake/searchdirs
             curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
               -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
@@ -78,9 +90,13 @@ jobs:
           CIBW_ENVIRONMENT: |
             XMAKE_ROOT=y
             PATH=$PATH:$HOME/.local/bin
-            LDFLAGS="-lpthread"
-            CFLAGS="-pthread"
-            CXXFLAGS="-pthread"
+            # 在 musl 下，有时候需要显式指定搜索路径
+            CPATH=/usr/include
+            LIBRARY_PATH=/usr/lib
+            # 显式告知链接器链接 libintl，解决 glib 在 musl 下的 undefined reference
+            LDFLAGS=-lpthread -lintl
+            CFLAGS=-pthread
+            CXXFLAGS=-pthread -std=c++17
           CIBW_BUILD_VERBOSITY: 2
 
       - uses: actions/upload-artifact@v4
@@ -102,24 +118,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        
       - name: Install xmake
         run: brew install xmake
+      
       - name: Cache xmake packages
         uses: actions/cache@v4
         with:
           path: ~/.xmake
-          key: xmake-macosx_arm64-${{ hashFiles('xmake.lua') }}
+          # 修改点：将 python 版本加入 cache key 避免相互污染
+          key: xmake-macosx_arm64-${{ matrix.python }}-${{ hashFiles('xmake.lua') }}
+          
       - name: Workaround for giflib
         run: |
           mkdir -p ~/.xmake/searchdirs
           curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
             -o ~/.xmake/searchdirs/giflib-5.2.2.tar.gz
           xmake g --pkg_searchdirs=~/.xmake/searchdirs
+          
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-macosx_arm64
           CIBW_BUILD_VERBOSITY: 2
+          # 修改点：强制注入 C++17 编译标准，解决 shared_mutex 报错
+          CIBW_ENVIRONMENT: 'CXXFLAGS="-std=c++17"'
+          
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-macosx_arm64
@@ -136,30 +163,48 @@ jobs:
         python: [cp310, cp312, cp313t, cp314t]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
-      - name: Install xmake
-        uses: MinoruSekine/setup-scoop@v4.0.2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          apps: xmake
-      - name: Cache xmake packages
-        uses: actions/cache@v4
+          enable-cache: true
+
+      - name: Setup xmake
+        uses: xmake-io/github-action-setup-xmake@v1
         with:
-          path: ${{ env.LOCALAPPDATA }}\.xmake
-          key: xmake-win_amd64-${{ hashFiles('xmake.lua') }}
-      - name: Workaround for giflib
+          xmake-version: 2.9.9
+
+      # 用全局 pip 安装 meson 和 ninja，用 choco 补充 pkg-config
+      - name: Install Global Build Tools
+        run: |
+          python -m pip install meson ninja
+          choco install pkgconfiglite --no-progress
+
+      - name: Pre-download giflib
         shell: bash
         run: |
-          mkdir -p "$USERPROFILE/AppData/Local/.xmake/searchdirs"
-          curl -fsSL "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" \
-            -o "$USERPROFILE/AppData/Local/.xmake/searchdirs/giflib-5.2.2.tar.gz"
-          xmake g --pkg_searchdirs="$USERPROFILE/AppData/Local/.xmake/searchdirs"
+          mkdir -p "$LOCALAPPDATA/.xmake/searchdirs"
+          curl -L "https://github.com/python-pillow/pillow-depends/raw/main/giflib-5.2.2.tar.gz" -o "$LOCALAPPDATA/.xmake/searchdirs/giflib-5.2.2.tar.gz"
+          # 在全局层面配置一次，确保所有子进程继承
+          xmake g --pkg_searchdirs="$LOCALAPPDATA/.xmake/searchdirs" -y
+
       - name: Build wheel
         uses: pypa/cibuildwheel@v3.2.0
         env:
           CIBW_BUILD: ${{ matrix.python }}-win_amd64
+          CIBW_BUILD_FRONTEND: "pip"
+          # 仅安装 setuptools 给 Xmake 的内置 meson 提供缺失的环境，绝不安装 meson/ninja
+          CIBW_BEFORE_BUILD: "pip install setuptools"
+          
+          # 仅保留防路径崩溃的 GLOBALDIR，删除 CXXFLAGS/LDFLAGS 避免毒死链接器
+          CIBW_ENVIRONMENT: >
+            XMAKE_GLOBALDIR=C:/xmake
+            XMAKE_ROOT=y
           CIBW_BUILD_VERBOSITY: 2
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.python }}-win_amd64
@@ -204,8 +249,20 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: sdist
-          path: dist
+          path: dist/
+      - name: Verify wheel integrity
+        run: |
+          for whl in dist/*.whl; do
+            python3 -m zipfile -t "$whl" || { echo "CORRUPT: $whl"; exit 1; }
+          done
+          echo "All wheels passed integrity check"
+          ls -la dist/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
       - name: Publish to PyPI
         run: uv publish --trusted-publishing always

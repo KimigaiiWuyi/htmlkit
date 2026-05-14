@@ -14,44 +14,41 @@ Lesser General Public License for more details.
 You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, see <https://www.gnu.org/licenses/>.
 ]]
+set_languages("c11", "cxx17")
+
 add_rules("mode.debug", "mode.release", "mode.releasedbg")
-
 set_license("LGPL-3.0-or-later")
-
 add_repositories("my-repo repo")
 
--- 全局开启 PIC
-add_requireconfs("**", { configs = { shared = false, pic = true } })
+add_requireconfs("**", { system = false, configs = { shared = false, pic = true } })
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 关键：阻止任何上游包（glib/meson/gettext 等）将 python 作为子依赖拉下来。
--- xmake 的 glib 包在 Linux 上会通过 meson 构建，meson 会声明 python 为
--- build-tool 依赖，从而触发 "install python 3.13.x" 的错误流程。
--- 将 python 标记为 system=true 让 xmake 直接使用宿主 python3，不再自行编译。
--- ─────────────────────────────────────────────────────────────────────────────
-add_requireconfs("**.python", { override = true, system = true })
-add_requireconfs("python",    { override = true, system = true })
+-- 专为 Alpine/musllinux 准备的动态库注入（必须放在上述 ** 配置之后）
+if is_plat("linux") then
+    if os.isfile("/etc/alpine-release") then
+        -- 强制使用系统自带的动态库，避开源码静态编译 glib/pango 的巨坑，生成 wheel 时 cibuildwheel 会自动把依赖的 .so 封包进去
+        add_requireconfs("glib", "pcre2", "harfbuzz", "pango", "cairo", "fribidi", { system = true, override = true, configs = { shared = true } })
+    else
+        -- 常规 manylinux (glibc) 保持原配置
+        add_requireconfs("glib", { configs = { libintl = true } })
+    end
+end
 
--- 锁定 fribidi 版本，避免 v1.0.16 的构建问题
-add_requireconfs("fribidi",   { override = true, version = "v1.0.15" })
+add_requireconfs("python", "**.python", { system = true, override = true })
+-- 强制要求 Xmake 使用系统中 (choco 注入到 PATH 里的) 原生可执行文件，避开下载纯 Python 脚本导致 Windows 进程创建失败的坑
+add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
+
+-- 其他包规则保持不变
+add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
 
--- 全局：非系统包优先从 xmake 仓库下载静态库版本
-add_requireconfs("**", { override = true, system = false, configs = { shared = false } })
+-- 删除冲突配置：让 Xmake 使用系统或 pip 安装的 meson/ninja，避免 Python 3.12+ 缺少 distutils 导致 meson 崩溃
+-- add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
 
--- python 例外：必须 system=true（上面已覆盖，这里再显式保证不被全局规则覆盖）
-add_requireconfs("**.python", { override = true, system = true })
-add_requireconfs("python",    { override = true, system = true })
-
--- 构建工具从 xmake 仓库获取
-add_requireconfs("cmake|ninja|meson", { override = true, system = false, configs = { shared = false } })
-
--- ─────────────────────────────────────────────────────────────────────────────
 -- 包依赖定义
--- ─────────────────────────────────────────────────────────────────────────────
+add_requires("libintl", { configs = { shared = false } })
+add_requires("libiconv", { configs = { shared = false } })
 add_requires("libffi",     { configs = { shared = false } })
-add_requires("libintl",    { configs = { shared = false } })
-add_requires("glib",       { configs = { shared = false } })
+-- add_requires("glib",       { configs = { shared = false } })
 add_requires("harfbuzz",   { configs = { shared = false } })
 add_requires("fribidi",    { configs = { shared = false } })
 add_requires("litehtml",   { configs = { utf8 = true } })
@@ -75,21 +72,65 @@ target("core")
 
     -- 手动注入 Python 头文件（由 cibuildwheel venv 提供的 python3）
     on_load(function(target)
-        local incdir = os.iorun("python3 -c \"import sysconfig; print(sysconfig.get_path('include'))\""):trim()
-        if incdir and incdir ~= "" then
-            target:add("includedirs", incdir)
+        import("lib.detect.find_tool")
+        
+        local python = find_tool("python") or find_tool("python3")
+        
+        if python then
+            local incdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('include'))"}):trim()
+            local libdir = os.iorunv(python.program, {"-c", "import sysconfig; print(sysconfig.get_path('stdlib'))"}):trim()
+            
+            if incdir and incdir ~= "" then
+                target:add("includedirs", incdir)
+            end
+
+            if is_plat("windows") then
+                -- 1. 禁用 Python 头文件的自动链接 (Autolinking)
+                -- 只关闭 #pragma comment(lib, ...) 指令，不影响 __declspec(dllimport) 符号导入
+                target:add("defines", "Py_NO_LINK")
+
+                local libpath = path.join(path.directory(libdir), "libs")
+                target:add("linkdirs", libpath)
+
+                -- 2. 获取库名并检测 free-threaded
+                local py_info = os.iorunv(python.program, { "-c", [[
+import sys
+import sysconfig
+import os
+is_t = hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
+v = sys.version_info
+libname = sysconfig.get_config_var('LIBRARY')
+if not libname:
+    t = 't' if is_t else ''
+    libname = f"python{v[0]}{v[1]}{t}"
+print(f"{os.path.splitext(libname)[0]}|{1 if is_t else 0}")
+                ]] }):trim():split("|")
+
+                local libname = py_info[1]
+                local is_free_threaded = py_info[2] == "1"
+
+                -- 3. 手动链接正确的库名 (如 python314t)
+                target:add("links", libname)
+
+                -- 4. 如果是 free-threaded，必须定义这个宏，否则头文件内部逻辑会乱
+                if is_free_threaded then
+                    target:add("defines", "Py_GIL_DISABLED=1")
+                end
+            end
         end
+        
         target:add("defines", "PY_SSIZE_T_CLEAN")
     end)
 
     add_files("core/*.cpp")
     add_defines("UNICODE")
 
-    add_packages("pango", "cairo", "zlib", "glib", "harfbuzz", "fribidi")
+    add_packages("pango", "cairo", "glib", "harfbuzz", "fribidi")
     add_packages("litehtml", "libjpeg-turbo", "libwebp", "libavif", "giflib", "aklomp-base64", "fmt")
+    add_packages("libintl", "libiconv", "libffi", "zlib")
 
     if is_plat("windows") then
-        add_links("Dwrite")
+        add_links("Dwrite", "User32", "Gdi32")
     end
     if is_plat("macosx") then
         add_frameworks("CoreText", "CoreGraphics", "CoreFoundation")
