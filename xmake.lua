@@ -38,7 +38,7 @@ add_requireconfs("python", "**.python", { system = true, override = true })
 add_requireconfs("cmake", "ninja", "meson", { system = true, override = true })
 
 -- 其他包规则保持不变
-add_requireconfs("fribidi", { override = true, version = "v1.0.15" })
+add_requireconfs("fribidi", { override = true, version = "v1.0.16" })
 add_requireconfs("**.cairo",  { override = true, configs = { xlib = false } })
 
 -- 删除冲突配置：让 Xmake 使用系统或 pip 安装的 meson/ninja，避免 Python 3.12+ 缺少 distutils 导致 meson 崩溃
@@ -109,12 +109,14 @@ print(f"{os.path.splitext(libname)[0]}|{1 if is_t else 0}")
                 local libname = py_info[1]
                 local is_free_threaded = py_info[2] == "1"
 
-                -- 3. 手动链接正确的库名 (如 python314t)
-                target:add("links", libname)
-
-                -- 4. 如果是 free-threaded，必须定义这个宏，否则头文件内部逻辑会乱
+                -- 3. free-threaded Python 没有 stable ABI，必须链接具体版本库。
+                -- 常规 abi3 wheel 在 Windows 上链接 python3.lib，避免依赖 python312.dll
+                -- 这类构建时版本 DLL。
                 if is_free_threaded then
+                    target:add("links", libname)
                     target:add("defines", "Py_GIL_DISABLED=1")
+                else
+                    target:add("links", "python3")
                 end
             end
         end
